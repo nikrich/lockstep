@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="lockstep/styles.css" />
+<script src="https://unpkg.com/lucide@0.544.0/dist/umd/lucide.min.js"></script>
+<script src="ds-bundle.js"></script>
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{background:#0a0d11;font-family:'Sora',ui-sans-serif,system-ui,sans-serif;}
+  ::selection{background:rgba(255,178,36,0.28);}
+  input::placeholder,textarea::placeholder{color:var(--text-muted);opacity:1;}
+  ::-webkit-scrollbar{width:10px;height:10px;}
+  ::-webkit-scrollbar-thumb{background:var(--ink-700);border-radius:8px;border:2px solid transparent;background-clip:padding-box;}
+  ::-webkit-scrollbar-thumb:hover{background:var(--ink-600);background-clip:padding-box;}
+  @keyframes ls-spin{to{transform:rotate(360deg);}}
+  @keyframes ls-rise{from{opacity:0;transform:translate(-50%,10px);}to{opacity:1;transform:translate(-50%,0);}}
+  @keyframes ls-fade{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+  @keyframes ls-pop{0%{transform:scale(.85);opacity:0;}60%{transform:scale(1.04);}100%{transform:scale(1);opacity:1;}}
+  @keyframes ls-grow{from{transform:scaleX(0);}to{transform:scaleX(1);}}
+  /* Light variant: remap the ink + slate ramps; the semantic aliases follow. Status/lock colors stay identical. */
+  [data-theme="light"]{
+    /* raw ramp — for components that read --ink-*/--slate-* directly (Switch, Avatar, counts) */
+    --ink-990:#f4f7fa; --ink-950:#eceff4; --ink-900:#ffffff; --ink-850:#f7f9fb;
+    --ink-800:#ffffff; --ink-750:#eef2f6; --ink-700:#e6ebf1; --ink-600:#d2dae2;
+    --ink-500:#bcc6d1; --hairline:#e8ecf1;
+    --slate-500:#79838f; --slate-400:#79838f; --slate-300:#4a5765; --slate-200:#33404c; --slate-100:#1a232e; --slate-050:#10151b;
+    /* semantic aliases — computed at :root, so must be re-declared here to take effect */
+    --bg-app:#f4f7fa; --bg-panel:#ffffff; --surface-card:#ffffff; --surface-raised:#ffffff; --surface-sunken:#eef2f6; --surface-hover:#f1f4f8;
+    --text-strong:#10151b; --text-body:#29333f; --text-secondary:#4a5765; --text-muted:#79838f;
+    --border-subtle:#e8ecf1; --border-default:#dce2e9; --border-strong:#c6ced8;
+    --amber-glow:rgba(255,178,36,0.18);
+    --shadow-edge:inset 0 1px 0 rgba(255,255,255,0.7);
+    --shadow-xs:0 1px 2px rgba(17,22,29,.07);
+    --shadow-sm:0 1px 2px rgba(17,22,29,.06),0 1px 3px rgba(17,22,29,.08);
+    --shadow-md:0 4px 14px rgba(17,22,29,.08),0 2px 6px rgba(17,22,29,.06);
+    --shadow-lg:0 18px 48px rgba(17,22,29,.16);
+    --glow-amber:0 6px 18px rgba(255,178,36,0.28);
+  }
+  [data-theme="light"] ::selection{background:rgba(255,178,36,0.34);}
+  [data-theme="light"] ::-webkit-scrollbar-thumb{background:var(--ink-700);background-clip:padding-box;}
+</style>
+</helmet>
+<div style="position:fixed;inset:0;overflow:hidden;">{{ app }}</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const h = (t, p, ...c) => React.createElement(t, p, ...c.flat());
+
+// Lucide icon helper (line icons, ~1.75 stroke) — matches the DS iconography spec.
+function Icon({ n, s = 16, color, style = {}, sw = 1.75 }) {
+  const r = React.useRef(null);
+  React.useEffect(() => {
+    const el = r.current;
+    if (!el) return;
+    el.innerHTML = '';
+    const i = document.createElement('i');
+    i.setAttribute('data-lucide', n);
+    el.appendChild(i);
+    if (window.lucide) window.lucide.createIcons({ attrs: { width: s, height: s, 'stroke-width': sw } });
+  }, [n, s, sw]);
+  return h('span', { ref: r, style: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: color || 'currentColor', flex: 'none', ...style } });
+}
+
+const PROVIDERS = {
+  r2:     { label: 'Cloudflare R2', tile: '#f6821f', endpoint: 'https://<account-id>.r2.cloudflarestorage.com', region: 'auto', note: '$0 egress · the Lockstep default' },
+  b2:     { label: 'Backblaze B2', tile: '#e21e29', endpoint: 'https://s3.us-west-004.backblazeb2.com', region: 'us-west-004', note: 'Cheapest at-rest · free egress to CDN' },
+  wasabi: { label: 'Wasabi', tile: '#1ec07a', endpoint: 'https://s3.wasabisys.com', region: 'us-east-1', note: 'Flat rate · no egress fees' },
+  s3:     { label: 'AWS S3', tile: '#ff9900', endpoint: 'https://s3.<region>.amazonaws.com', region: 'us-east-1', note: 'Egress billed by AWS — watch clone costs' },
+  minio:  { label: 'MinIO', tile: '#c72e49', endpoint: 'https://minio.your-host.com', region: 'us-east-1', note: 'Self-hosted · your hardware' },
+};
+
+const ROLE_TONE = { Owner: 'amber', Admin: 'blue', Member: 'neutral' };
+
+function seedOrgs() {
+  const lockOverview = [
+    { path: 'Content/Maps/Arena.umap', state: 'locked', owner: 'Kai Renner', age: '1h 40m', size: '180 MB' },
+    { path: 'Content/Characters/Hero/Hero.uasset', state: 'mine', owner: 'You', age: '12m', size: '61 MB' },
+    { path: 'Content/FX/Explosion.uasset', state: 'locked', owner: 'Theo Park', age: '3h 02m', size: '33 MB' },
+    { path: 'Content/Audio/Boss/Theme.fbx', state: 'locked', owner: 'Mara Voss', age: '6h 18m', size: '12 MB', stale: true },
+    { path: 'Content/Vehicles/Tank/Tank.uasset', state: 'locked', owner: 'Juno Sandak', age: '26h', size: '94 MB', stale: true },
+  ];
+  return {
+    aurora: {
+      id: 'aurora', name: 'Aurora Interactive', slug: 'aurora-interactive', role: 'Owner', plan: 'Studio',
+      seatPrice: 12, seatsTotal: 15,
+      storage: { connected: true, provider: 'r2', endpoint: 'https://3a9f2c1e7b04.r2.cloudflarestorage.com', region: 'auto', bucket: 'aurora-assets', accessKeyId: 'b595a1f0c3d24e7f8a2c', secret: 'R2sk_8f3a91d0c4b27e6f5a1098c7d2e3f4b', prefix: '', storedGB: 104, blobs: 2418 },
+      members: [
+        { name: 'You', email: 'you@auroragames.dev', role: 'Owner', you: true },
+        { name: 'Kai Renner', email: 'kai@auroragames.dev', role: 'Admin' },
+        { name: 'Ada Fournier', email: 'ada@auroragames.dev', role: 'Admin' },
+        { name: 'Theo Park', email: 'theo@auroragames.dev', role: 'Member' },
+        { name: 'Mara Voss', email: 'mara@auroragames.dev', role: 'Member' },
+        { name: 'Juno Sandak', email: 'juno@auroragames.dev', role: 'Member' },
+        { name: 'Reza Halim', email: 'reza@auroragames.dev', role: 'Member' },
+        { name: 'Nina Costa', email: 'nina@auroragames.dev', role: 'Member' },
+      ],
+      invites: [
+        { email: 'lee@auroragames.dev', role: 'Member', sent: '2d ago' },
+        { email: 'sam.fisher@contractor.io', role: 'Admin', sent: '5h ago' },
+      ],
+      repos: [
+        { name: 'aurora-rpg', slug: 'aurora-rpg', sizeGB: 104, blobs: 2418, locks: 5, activity: '14m ago', branch: 'feature/arena-pass', lockList: lockOverview },
+        { name: 'arena-shooter', slug: 'arena-shooter', sizeGB: 41, blobs: 980, locks: 2, activity: '2h ago', branch: 'main', lockList: lockOverview.slice(0, 2) },
+        { name: 'ui-toolkit', slug: 'ui-toolkit', sizeGB: 2, blobs: 64, locks: 0, activity: 'yesterday', branch: 'main', lockList: [] },
+        { name: 'audio-bank', slug: 'audio-bank', sizeGB: 18, blobs: 412, locks: 1, activity: '3d ago', branch: 'main', lockList: lockOverview.slice(3, 4) },
+      ],
+      tokens: [
+        { name: 'Unreal plugin · Win workstation', last4: '4f2a', scopes: ['lock', 'read', 'write'], created: '12 Mar 2026', used: '3m ago' },
+        { name: 'CI · GitHub Actions', last4: '9c01', scopes: ['read', 'write'], created: '02 Feb 2026', used: '2h ago' },
+        { name: 'CLI · kai-laptop', last4: '7b3d', scopes: ['lock', 'read'], created: '21 Jan 2026', used: 'yesterday' },
+      ],
+      invoices: [
+        { id: 'INV-2026-006', date: '01 Jun 2026', amount: 96, status: 'Paid' },
+        { id: 'INV-2026-005', date: '01 May 2026', amount: 96, status: 'Paid' },
+        { id: 'INV-2026-004', date: '01 Apr 2026', amount: 84, status: 'Paid' },
+      ],
+      activity: [
+        { who: 'Kai Renner', what: 'locked Content/Maps/Arena.umap', when: '14m ago', icon: 'lock', tint: 'var(--status-locked)' },
+        { who: 'You', what: 'rotated the R2 access key', when: '1h ago', icon: 'key-round', tint: 'var(--amber-400)' },
+        { who: 'Ada Fournier', what: 'invited sam.fisher@contractor.io as Admin', when: '5h ago', icon: 'user-plus', tint: 'var(--status-mine)' },
+        { who: 'Theo Park', what: 'pushed 11 blobs to aurora-rpg', when: '6h ago', icon: 'git-commit-horizontal', tint: 'var(--status-synced)' },
+        { who: 'System', what: 'monthly invoice INV-2026-006 paid', when: '2d ago', icon: 'receipt', tint: 'var(--text-muted)' },
+      ],
+      ttl: 15, lockPolicy: 'hard',
+    },
+    nightjar: {
+      id: 'nightjar', name: 'Nightjar Games', slug: 'nightjar', role: 'Admin', plan: 'Indie',
+      seatPrice: 12, seatsTotal: 5,
+      storage: { connected: false, provider: 'r2', endpoint: '', region: 'auto', bucket: '', accessKeyId: '', secret: '', prefix: '', storedGB: 0, blobs: 0 },
+      members: [
+        { name: 'You', email: 'you@nightjar.gg', role: 'Admin', you: true },
+        { name: 'Wren Adeyemi', email: 'wren@nightjar.gg', role: 'Owner' },
+        { name: 'Bo Lindqvist', email: 'bo@nightjar.gg', role: 'Member' },
+      ],
+      invites: [],
+      repos: [{ name: 'moonlit', slug: 'moonlit', sizeGB: 0, blobs: 0, locks: 0, activity: 'never', branch: 'main', lockList: [] }],
+      tokens: [],
+      invoices: [{ id: 'INV-2026-006', date: '01 Jun 2026', amount: 36, status: 'Paid' }],
+      activity: [
+        { who: 'Wren Adeyemi', what: 'created repository moonlit', when: '1d ago', icon: 'box', tint: 'var(--status-mine)' },
+        { who: 'You', what: 'joined Nightjar Games', when: '1d ago', icon: 'user-plus', tint: 'var(--status-synced)' },
+      ],
+      ttl: 15, lockPolicy: 'soft',
+    },
+  };
+}
+
+class Component extends DCLogic {
+  state = {
+    ready: false,
+    theme: 'dark',
+    route: 'signin',
+    orgId: 'aurora',
+    orgs: seedOrgs(),
+    nav: 'home',
+    repoOpen: null,
+    orgMenuOpen: false,
+    userMenuOpen: false,
+    newOrgName: '',
+    storageEditing: false,
+    draft: null,
+    testState: 'idle',
+    showSecret: false,
+    inviteEmail: '',
+    inviteRole: 'Member',
+    roleMenu: null,
+    tokenModal: null,
+    toast: null,
+    confirm: null,
+    seatPulse: false,
+  };
+
+  componentDidMount() {
+    const tick = () => {
+      const ns = window.LockstepDesignSystem_e35539;
+      if (ns && ns.Button && window.lucide) { this.D = ns; this.setState({ ready: true }); }
+      else setTimeout(tick, 40);
+    };
+    tick();
+  }
+
+  org() { return this.state.orgs[this.state.orgId]; }
+  patchOrg(patch) {
+    this.setState(s => ({ orgs: { ...s.orgs, [s.orgId]: { ...s.orgs[s.orgId], ...(typeof patch === 'function' ? patch(s.orgs[s.orgId]) : patch) } } }));
+  }
+  flash(msg, tone = 'synced') {
+    this.setState({ toast: { msg, tone } });
+    clearTimeout(this._tt);
+    this._tt = setTimeout(() => this.setState({ toast: null }), 2600);
+  }
+  go(nav) { this.setState({ nav, repoOpen: null, orgMenuOpen: false, userMenuOpen: false }); }
+
+  makeDraft(org) {
+    const st = org.storage;
+    const p = PROVIDERS[st.provider] || PROVIDERS.r2;
+    return {
+      provider: st.provider, endpoint: st.endpoint || p.endpoint, region: st.region || p.region,
+      bucket: st.bucket, accessKeyId: st.accessKeyId, secret: st.secret, prefix: st.prefix,
+    };
+  }
+  ensureDraft() { if (!this.state.draft) this.setState({ draft: this.makeDraft(this.org()) }); }
+  setDraft(k, v) { this.setState(s => ({ draft: { ...s.draft, [k]: v }, testState: 'idle' })); }
+  pickProvider(key) {
+    const p = PROVIDERS[key];
+    this.setState(s => ({ draft: { ...s.draft, provider: key, endpoint: p.endpoint, region: p.region }, testState: 'idle' }));
+  }
+  runTest() {
+    const d = this.state.draft;
+    if (!d.bucket || !d.accessKeyId || !d.secret) { this.setState({ testState: 'fail' }); return; }
+    this.setState({ testState: 'testing' });
+    clearTimeout(this._test);
+    this._test = setTimeout(() => {
+      const ok = d.secret.toLowerCase() !== 'wrong' && d.accessKeyId.length >= 6;
+      this.setState({ testState: ok ? 'pass' : 'fail' });
+    }, 1500);
+  }
+  saveStorage() {
+    const d = this.state.draft;
+    this.patchOrg(o => ({ storage: { ...o.storage, ...d, connected: true, storedGB: o.storage.storedGB || 0, blobs: o.storage.blobs || 0 } }));
+    this.setState({ storageEditing: false, testState: 'idle' });
+    this.flash('Storage connected · bucket ' + d.bucket, 'synced');
+  }
+
+  renderVals() {
+    if (!this.state.ready) return { app: this.splash() };
+    let body;
+    if (this.state.route === 'signin') body = this.signin();
+    else if (this.state.route === 'createorg') body = this.createOrg();
+    else body = this.appShell();
+    return {
+      app: h('div', {
+        key: this.state.theme,
+        'data-theme': this.state.theme,
+        style: { height: '100%', width: '100%', background: 'var(--bg-app)', color: 'var(--text-body)', font: 'var(--role-body)', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+      }, body, this.toastEl(), this.confirmEl(), this.tokenDialogEl()),
+    };
+  }
+
+  splash() {
+    return h('div', { style: { height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0d11', color: '#7d8b9c', font: '600 13px/1 Sora, sans-serif', gap: 10 } },
+      h('span', { style: { width: 26, height: 26, borderRadius: 7, background: '#ffb224', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', animation: 'ls-pop .5s var(--ease-out)' } },
+        h('span', { style: { width: 7, height: 11, background: '#1a1206', borderRadius: '999px 999px 4px 4px', marginTop: -1 } })),
+      'Loading Lockstep\u2026');
+  }
+
+  // ================= AUTH =================
+  signin() {
+    const oauth = (label, icon, primary) => h('button', {
+      onClick: () => { this.setState({ route: 'app', nav: 'home' }); this.flash('Signed in as you@auroragames.dev', 'mine'); },
+      onMouseEnter: e => { e.currentTarget.style.borderColor = 'var(--border-strong)'; e.currentTarget.style.background = primary ? 'var(--brand-hover)' : 'var(--surface-hover)'; },
+      onMouseLeave: e => { e.currentTarget.style.borderColor = primary ? 'transparent' : 'var(--border-default)'; e.currentTarget.style.background = primary ? 'var(--brand)' : 'var(--surface-card)'; },
+      style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, height: 46, width: '100%', borderRadius: 'var(--radius-md)', cursor: 'pointer', font: '600 14px/1 Sora, sans-serif', border: '1px solid ' + (primary ? 'transparent' : 'var(--border-default)'), background: primary ? 'var(--brand)' : 'var(--surface-card)', color: primary ? 'var(--brand-contrast)' : 'var(--text-body)', boxShadow: primary ? 'var(--glow-amber)' : 'var(--shadow-edge)', transition: 'all var(--dur-fast) var(--ease-out)' },
+    }, h(Icon, { n: icon, s: 18 }), label);
+
+    return h('div', { style: { flex: 1, display: 'flex', minHeight: 0 } },
+      h('div', { style: { flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: 48, background: 'radial-gradient(1100px 520px at 18% -10%, rgba(255,178,36,0.10), transparent 60%), var(--bg-panel)', borderRight: '1px solid var(--hairline)' } },
+        h('img', { src: this.state.theme === 'light' ? 'lockstep/logo-wordmark-light.svg' : 'lockstep/logo-wordmark-dark.svg', height: 30, style: { alignSelf: 'flex-start' } }),
+        h('div', { style: { maxWidth: 460 } },
+          h('div', { style: { font: '600 11px/1 "Spline Sans Mono", monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--amber-400)', marginBottom: 18 } }, 'Admin control plane'),
+          h('div', { style: { font: '700 38px/1.15 Sora, sans-serif', letterSpacing: '-0.02em', color: 'var(--text-strong)' } }, 'Own your bytes.', h('br'), 'Run your studio.'),
+          h('p', { style: { font: '400 15px/1.6 Sora, sans-serif', color: 'var(--text-secondary)', marginTop: 18 } }, 'Set up storage, members, repos and billing for your team. This is the one place bucket credentials are ever entered \u2014 the desktop app never sees them.')),
+        h('div', { style: { display: 'flex', gap: 22, font: '500 12px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } },
+          h('span', null, '$0 egress'), h('span', null, '\u00b7'), h('span', null, 'BYO bucket'), h('span', null, '\u00b7'), h('span', null, 'Perforce-grade locks'))),
+      h('div', { style: { flex: '0 0 480px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, position: 'relative' } },
+        this.themeToggle({ position: 'absolute', top: 24, right: 24 }),
+        h('div', { style: { width: '100%', maxWidth: 340 } },
+          h('div', { style: { font: '700 24px/1.2 Sora, sans-serif', letterSpacing: '-0.015em', color: 'var(--text-strong)' } }, 'Sign in to Lockstep'),
+          h('p', { style: { font: '400 14px/1.5 Sora, sans-serif', color: 'var(--text-muted)', marginTop: 8, marginBottom: 26 } }, 'OAuth only \u2014 no passwords to leak.'),
+          h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } }, oauth('Continue with GitHub', 'github', true), oauth('Continue with Google', 'chrome', false)),
+          h('div', { style: { marginTop: 28, paddingTop: 18, borderTop: '1px solid var(--hairline)', font: '400 12px/1.6 Sora, sans-serif', color: 'var(--text-muted)' } },
+            'By continuing you agree to the ', h('span', { style: { color: 'var(--text-secondary)' } }, 'Terms'), ' and ', h('span', { style: { color: 'var(--text-secondary)' } }, 'Privacy Policy'), '.'))));
+  }
+
+  createOrg() {
+    const name = this.state.newOrgName;
+    const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'your-org';
+    const { Button, Input, Card } = this.D;
+    return h('div', { style: { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 } },
+      h('div', { style: { height: 56, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', borderBottom: '1px solid var(--hairline)' } },
+        h('img', { src: this.state.theme === 'light' ? 'lockstep/logo-wordmark-light.svg' : 'lockstep/logo-wordmark-dark.svg', height: 24 }),
+        h('div', { style: { display: 'flex', gap: 8 } }, this.themeToggle(), this.iconBtn('log-out', () => this.setState({ route: 'signin' }), 'Sign out'))),
+      h('div', { style: { flex: 1, overflowY: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 } },
+        h('div', { style: { width: '100%', maxWidth: 460 } },
+          h('div', { style: { width: 46, height: 46, borderRadius: 12, background: 'color-mix(in srgb, var(--amber-400) 16%, var(--surface-card))', border: '1px solid color-mix(in srgb, var(--amber-400) 30%, var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--amber-400)', marginBottom: 20 } }, h(Icon, { n: 'building-2', s: 22 })),
+          h('div', { style: { font: '700 26px/1.2 Sora, sans-serif', letterSpacing: '-0.02em', color: 'var(--text-strong)' } }, 'Create your organization'),
+          h('p', { style: { font: '400 14px/1.55 Sora, sans-serif', color: 'var(--text-muted)', marginTop: 8, marginBottom: 26 } }, 'An org is where your team, repos, storage and billing live. You can rename it later; the slug is permanent.'),
+          h(Card, { pad: 'lg' },
+            h(Input, { label: 'Organization name', placeholder: 'Aurora Interactive', value: name, autoFocus: true, onChange: e => this.setState({ newOrgName: e.target.value }) }),
+            h('div', { style: { marginTop: 16, display: 'flex', flexDirection: 'column', gap: 6 } },
+              h('span', { style: { font: '600 13px/1 Sora, sans-serif', color: 'var(--text-secondary)' } }, 'URL slug'),
+              h('div', { style: { display: 'flex', alignItems: 'center', height: 'var(--control-md)', padding: '0 11px', background: 'var(--surface-sunken)', border: '1px dashed var(--border-default)', borderRadius: 'var(--radius-md)', font: '500 14px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } },
+                'app.lockstepcloud.com/', h('span', { style: { color: name ? 'var(--amber-300)' : 'var(--text-muted)' } }, slug))),
+            h(Button, { variant: 'primary', full: true, disabled: !name.trim(), style: { marginTop: 22 }, iconRight: h(Icon, { n: 'arrow-right', s: 16 }), onClick: () => {
+              const id = slug;
+              this.setState(s => ({ orgs: { ...s.orgs, [id]: { id, name: name.trim(), slug, role: 'Owner', plan: 'Indie', seatPrice: 12, seatsTotal: 5, storage: { connected: false, provider: 'r2', endpoint: '', region: 'auto', bucket: '', accessKeyId: '', secret: '', prefix: '', storedGB: 0, blobs: 0 }, members: [{ name: 'You', email: 'you@auroragames.dev', role: 'Owner', you: true }], invites: [], repos: [], tokens: [], invoices: [], activity: [{ who: 'You', what: 'created ' + name.trim(), when: 'just now', icon: 'building-2', tint: 'var(--status-synced)' }], ttl: 15, lockPolicy: 'hard' } }, orgId: id, route: 'app', nav: 'storage', newOrgName: '', draft: null, storageEditing: true }));
+              this.flash('Organization created \u00b7 let\u2019s connect storage', 'mine');
+            } }, 'Create organization')))));
+  }
+
+  // ================= APP SHELL =================
+  appShell() {
+    return h('div', { style: { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 } },
+      this.topbar(),
+      h('div', { style: { flex: 1, display: 'flex', minHeight: 0 } },
+        this.sidebar(),
+        h('div', { style: { flex: 1, minWidth: 0, overflowY: 'auto', background: 'var(--bg-app)' } }, this.content())));
+  }
+
+  topbar() {
+    return h('div', { style: { height: 54, flex: 'none', display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px', background: 'var(--bg-panel)', borderBottom: '1px solid var(--hairline)', position: 'relative', zIndex: 50 } },
+      h('img', { src: this.state.theme === 'light' ? 'lockstep/logo-wordmark-light.svg' : 'lockstep/logo-wordmark-dark.svg', height: 22, style: { cursor: 'pointer' }, onClick: () => this.go('home') }),
+      h('span', { style: { width: 1, height: 22, background: 'var(--hairline)', margin: '0 4px' } }),
+      this.orgSwitcher(),
+      h('div', { style: { flex: 1 } }),
+      this.iconBtn('command', () => this.flash('Command menu (\u2318K) \u2014 demo', 'mine'), 'Command menu'),
+      this.themeToggle(),
+      this.iconBtn('life-buoy', () => this.flash('Docs & support \u2014 demo', 'mine'), 'Help'),
+      h('span', { style: { width: 1, height: 22, background: 'var(--hairline)', margin: '0 2px' } }),
+      this.userButton());
+  }
+
+  orgSwitcher() {
+    const org = this.org();
+    return h('div', { style: { position: 'relative' } },
+      h('button', {
+        onClick: () => this.setState(s => ({ orgMenuOpen: !s.orgMenuOpen, userMenuOpen: false })),
+        onMouseEnter: e => e.currentTarget.style.background = 'var(--surface-hover)',
+        onMouseLeave: e => e.currentTarget.style.background = this.state.orgMenuOpen ? 'var(--surface-hover)' : 'transparent',
+        style: { display: 'flex', alignItems: 'center', gap: 9, height: 38, padding: '0 9px 0 7px', borderRadius: 'var(--radius-md)', border: '1px solid transparent', background: this.state.orgMenuOpen ? 'var(--surface-hover)' : 'transparent', cursor: 'pointer', transition: 'background var(--dur-fast)' } },
+        this.orgTile(org, 24),
+        h('div', { style: { textAlign: 'left', lineHeight: 1.15 } },
+          h('div', { style: { font: '600 13px/1.15 Sora, sans-serif', color: 'var(--text-strong)' } }, org.name),
+          h('div', { style: { font: '500 11px/1.15 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, org.role + ' \u00b7 ' + org.plan)),
+        h(Icon, { n: 'chevrons-up-down', s: 14, color: 'var(--text-muted)' })),
+      this.state.orgMenuOpen && this.dropdown(280, [
+        h('div', { key: 'h', style: { padding: '4px 8px 8px', font: '600 10px/1 "Spline Sans Mono", monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)' } }, 'Organizations'),
+        ...Object.values(this.state.orgs).map(o => h('button', {
+          key: o.id, onClick: () => { this.setState({ orgId: o.id, nav: 'home', repoOpen: null, orgMenuOpen: false, draft: null, storageEditing: false, testState: 'idle' }); this.flash('Switched to ' + o.name, 'mine'); },
+          onMouseEnter: e => e.currentTarget.style.background = 'var(--surface-hover)', onMouseLeave: e => e.currentTarget.style.background = 'transparent',
+          style: { display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '8px', border: 'none', background: 'transparent', borderRadius: 'var(--radius-sm)', cursor: 'pointer', textAlign: 'left' } },
+          this.orgTile(o, 26),
+          h('div', { style: { flex: 1, minWidth: 0 } },
+            h('div', { style: { font: '600 13px/1.2 Sora, sans-serif', color: 'var(--text-strong)' } }, o.name),
+            h('div', { style: { font: '500 11px/1.2 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, o.role + ' \u00b7 ' + o.members.length + ' members')),
+          o.id === this.state.orgId && h(Icon, { n: 'check', s: 16, color: 'var(--amber-400)' }))),
+        h('div', { key: 'd', style: { height: 1, background: 'var(--hairline)', margin: '6px 0' } }),
+        h('button', { key: 'new', onClick: () => this.setState({ route: 'createorg', orgMenuOpen: false }),
+          onMouseEnter: e => e.currentTarget.style.background = 'var(--surface-hover)', onMouseLeave: e => e.currentTarget.style.background = 'transparent',
+          style: { display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 8px', border: 'none', background: 'transparent', borderRadius: 'var(--radius-sm)', cursor: 'pointer', color: 'var(--text-secondary)', font: '600 13px/1 Sora, sans-serif' } },
+          h('span', { style: { width: 26, height: 26, borderRadius: 7, border: '1px dashed var(--border-strong)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' } }, h(Icon, { n: 'plus', s: 15 })), 'Create organization'),
+      ]));
+  }
+
+  userButton() {
+    const { Avatar } = this.D;
+    return h('div', { style: { position: 'relative' } },
+      h('button', { onClick: () => this.setState(s => ({ userMenuOpen: !s.userMenuOpen, orgMenuOpen: false })), style: { display: 'flex', alignItems: 'center', gap: 6, height: 38, padding: '0 4px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 'var(--radius-pill)' } },
+        h(Avatar, { name: 'You Me', size: 30, ring: this.state.userMenuOpen })),
+      this.state.userMenuOpen && this.dropdown(248, [
+        h('div', { key: 'u', style: { display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px 12px', borderBottom: '1px solid var(--hairline)', marginBottom: 6 } },
+          h(Avatar, { name: 'You Me', size: 34 }),
+          h('div', { style: { minWidth: 0 } },
+            h('div', { style: { font: '600 13px/1.2 Sora, sans-serif', color: 'var(--text-strong)' } }, 'You'),
+            h('div', { style: { font: '500 11px/1.2 "Spline Sans Mono", monospace', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis' } }, 'you@auroragames.dev'))),
+        this.menuItem('user', 'Your profile', () => { this.go('settings'); }),
+        this.menuItem('settings', 'Org settings', () => { this.go('settings'); }),
+        this.menuItem(this.state.theme === 'dark' ? 'sun' : 'moon', this.state.theme === 'dark' ? 'Light theme' : 'Dark theme', () => this.setState(s => ({ theme: s.theme === 'dark' ? 'light' : 'dark', userMenuOpen: false }))),
+        h('div', { key: 'd', style: { height: 1, background: 'var(--hairline)', margin: '6px 0' } }),
+        this.menuItem('log-out', 'Sign out', () => this.setState({ route: 'signin', userMenuOpen: false }), 'var(--status-conflict)'),
+      ]));
+  }
+
+  menuItem(icon, label, onClick, color) {
+    return h('button', { key: label, onClick,
+      onMouseEnter: e => e.currentTarget.style.background = 'var(--surface-hover)', onMouseLeave: e => e.currentTarget.style.background = 'transparent',
+      style: { display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '8px', border: 'none', background: 'transparent', borderRadius: 'var(--radius-sm)', cursor: 'pointer', color: color || 'var(--text-body)', font: '500 13px/1 Sora, sans-serif', textAlign: 'left' } },
+      h(Icon, { n: icon, s: 16, color: color || 'var(--text-muted)' }), label);
+  }
+
+  dropdown(width, children) {
+    return h(React.Fragment, null,
+      h('div', { onClick: () => this.setState({ orgMenuOpen: false, userMenuOpen: false }), style: { position: 'fixed', inset: 0, zIndex: 60 } }),
+      h('div', { style: { position: 'absolute', top: 46, left: 0, width, padding: 6, background: 'var(--surface-raised)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-lg)', zIndex: 70, animation: 'ls-fade .14s var(--ease-out)' } }, children));
+  }
+
+  orgTile(o, size) {
+    const tints = { aurora: '#ffb224', nightjar: '#9b8cff' };
+    const tint = tints[o.id] || '#3b9eff';
+    const init = o.name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+    return h('span', { style: { width: size, height: size, flex: 'none', borderRadius: Math.round(size * 0.28), background: 'color-mix(in srgb, ' + tint + ' 22%, var(--surface-card))', color: tint, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', font: '700 ' + Math.round(size * 0.42) + 'px/1 Sora, sans-serif', border: '1px solid color-mix(in srgb, ' + tint + ' 28%, transparent)' } }, init);
+  }
+
+  sidebar() {
+    const org = this.org();
+    const st = org.storage;
+    const items = [
+      { id: 'home', icon: 'layout-dashboard', label: 'Overview' },
+      { id: 'storage', icon: 'hard-drive', label: 'Storage', dot: st.connected ? 'var(--status-synced)' : 'var(--status-conflict)' },
+      { id: 'members', icon: 'users', label: 'Members', count: org.members.length },
+      { id: 'repos', icon: 'box', label: 'Repositories', count: org.repos.length },
+      { id: 'tokens', icon: 'key-round', label: 'Access tokens', count: org.tokens.length || null },
+      { id: 'billing', icon: 'credit-card', label: 'Billing' },
+      { id: 'settings', icon: 'settings', label: 'Settings' },
+    ];
+    return h('div', { style: { width: 244, flex: 'none', display: 'flex', flexDirection: 'column', background: 'var(--bg-panel)', borderRight: '1px solid var(--hairline)' } },
+      h('div', { style: { padding: '12px 12px 10px' } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 9, padding: '8px 9px', borderRadius: 'var(--radius-md)', background: 'var(--surface-card)', border: '1px solid var(--border-subtle)' } },
+          this.orgTile(org, 28),
+          h('div', { style: { flex: 1, minWidth: 0 } },
+            h('div', { style: { font: '600 13px/1.2 Sora, sans-serif', color: 'var(--text-strong)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, org.name),
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 5, marginTop: 3 } },
+              h('span', { style: { width: 5, height: 5, borderRadius: '50%', background: org.role === 'Owner' ? 'var(--amber-400)' : 'var(--status-mine)' } }),
+              h('span', { style: { font: '500 11px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, 'You are ' + org.role))))),
+      h('div', { style: { flex: 1, padding: '4px 10px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' } },
+        h('div', { style: { font: '600 10px/1 "Spline Sans Mono", monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', padding: '10px 10px 6px' } }, 'Organization'),
+        ...items.map(it => this.navItem(it))),
+      h('div', { style: { padding: 12, borderTop: '1px solid var(--hairline)' } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '2px 2px' } },
+          h('span', { style: { width: 8, height: 8, borderRadius: '50%', background: 'var(--status-synced)', boxShadow: '0 0 8px var(--status-synced)', flex: 'none' } }),
+          h('span', { style: { flex: 1, font: '500 11px/1.3 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, 'api.lockstepcloud.com'),
+          h('span', { style: { font: '500 11px/1 "Spline Sans Mono", monospace', color: 'var(--status-synced)' } }, 'operational'))));
+  }
+
+  navItem(it) {
+    const active = this.state.nav === it.id;
+    return h('button', { key: it.id, onClick: () => this.go(it.id),
+      onMouseEnter: e => { if (!active) e.currentTarget.style.background = 'var(--surface-hover)'; },
+      onMouseLeave: e => { if (!active) e.currentTarget.style.background = 'transparent'; },
+      style: { display: 'flex', alignItems: 'center', gap: 11, width: '100%', height: 36, padding: '0 10px', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', textAlign: 'left', background: active ? 'var(--surface-raised)' : 'transparent', color: active ? 'var(--text-strong)' : 'var(--text-secondary)', font: (active ? '600' : '500') + ' 13.5px/1 Sora, sans-serif', boxShadow: active ? 'var(--shadow-edge)' : 'none', transition: 'background var(--dur-fast)' } },
+      h('span', { style: { position: 'relative', display: 'inline-flex' } },
+        h(Icon, { n: it.icon, s: 17, color: active ? 'var(--amber-400)' : 'var(--text-muted)' }),
+        it.dot && h('span', { style: { position: 'absolute', top: -2, right: -2, width: 7, height: 7, borderRadius: '50%', background: it.dot, border: '1.5px solid var(--bg-panel)' } })),
+      h('span', { style: { flex: 1 } }, it.label),
+      it.count != null && h('span', { style: { font: '600 11px/1 "Spline Sans Mono", monospace', color: active ? 'var(--amber-300)' : 'var(--text-muted)', background: active ? 'var(--status-locked-bg)' : 'rgba(125,139,156,0.12)', padding: '3px 6px', borderRadius: 'var(--radius-pill)' } }, it.count));
+  }
+
+  themeToggle(style = {}) {
+    return h('button', { onClick: () => this.setState(s => ({ theme: s.theme === 'dark' ? 'light' : 'dark' })), title: 'Toggle theme',
+      onMouseEnter: e => e.currentTarget.style.background = 'var(--surface-hover)', onMouseLeave: e => e.currentTarget.style.background = 'transparent',
+      style: { width: 34, height: 34, borderRadius: 'var(--radius-md)', border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', transition: 'background var(--dur-fast)', ...style } },
+      h(Icon, { n: this.state.theme === 'dark' ? 'sun' : 'moon', s: 17 }));
+  }
+
+  iconBtn(icon, onClick, label) {
+    return h('button', { onClick, title: label, 'aria-label': label,
+      onMouseEnter: e => e.currentTarget.style.background = 'var(--surface-hover)', onMouseLeave: e => e.currentTarget.style.background = 'transparent',
+      style: { width: 34, height: 34, borderRadius: 'var(--radius-md)', border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', transition: 'background var(--dur-fast)' } },
+      h(Icon, { n: icon, s: 17 }));
+  }
+
+  pageHead(title, sub, actions) {
+    return h('div', { style: { display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, marginBottom: 22 } },
+      h('div', null,
+        h('div', { style: { font: '700 23px/1.2 Sora, sans-serif', letterSpacing: '-0.02em', color: 'var(--text-strong)' } }, title),
+        sub && h('div', { style: { font: '400 13.5px/1.4 Sora, sans-serif', color: 'var(--text-muted)', marginTop: 6 } }, sub)),
+      actions && h('div', { style: { display: 'flex', gap: 10, flex: 'none' } }, actions));
+  }
+  pageWrap(children, max = 980) {
+    return h('div', { style: { padding: '28px 32px 64px', maxWidth: max, margin: '0 auto' } }, children);
+  }
+  sectionLabel(t) {
+    return h('div', { style: { font: '600 10px/1 "Spline Sans Mono", monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 12 } }, t);
+  }
+
+  content() {
+    switch (this.state.nav) {
+      case 'home': return this.home();
+      case 'storage': return this.storage();
+      case 'members': return this.members();
+      case 'repos': return this.state.repoOpen ? this.repoDetail() : this.repos();
+      case 'tokens': return this.tokens();
+      case 'billing': return this.billing();
+      case 'settings': return this.settings();
+      default: return this.home();
+    }
+  }
+
+  // ================= HOME =================
+  home() {
+    const org = this.org();
+    const st = org.storage;
+    const { Card, Button, StatBlock } = this.D;
+    const seats = org.members.length, total = org.seatsTotal;
+    const storageCard = st.connected
+      ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 14, padding: 18, borderRadius: 'var(--radius-lg)', background: 'color-mix(in srgb, var(--status-synced) 8%, var(--surface-card))', border: '1px solid color-mix(in srgb, var(--status-synced) 28%, var(--border-subtle))' } },
+          h('span', { style: { width: 40, height: 40, flex: 'none', borderRadius: 10, background: 'var(--status-synced-bg)', color: 'var(--status-synced)', display: 'flex', alignItems: 'center', justifyContent: 'center' } }, h(Icon, { n: 'circle-check-big', s: 21 })),
+          h('div', { style: { flex: 1, minWidth: 0 } },
+            h('div', { style: { font: '600 15px/1.2 Sora, sans-serif', color: 'var(--text-strong)' } }, 'Connected to your ' + PROVIDERS[st.provider].label + ' bucket'),
+            h('div', { style: { font: '500 12px/1.3 "Spline Sans Mono", monospace', color: 'var(--text-muted)', marginTop: 4 } }, st.bucket + ' \u00b7 ' + st.storedGB + ' GB \u00b7 $0 egress')),
+          h(Button, { variant: 'ghost', size: 'sm', onClick: () => this.go('storage'), iconRight: h(Icon, { n: 'arrow-right', s: 14 }) }, 'Manage'))
+      : h('div', { style: { display: 'flex', alignItems: 'center', gap: 14, padding: 18, borderRadius: 'var(--radius-lg)', background: 'color-mix(in srgb, var(--status-conflict) 9%, var(--surface-card))', border: '1px solid color-mix(in srgb, var(--status-conflict) 34%, var(--border-subtle))' } },
+          h('span', { style: { width: 40, height: 40, flex: 'none', borderRadius: 10, background: 'var(--status-conflict-bg)', color: 'var(--status-conflict)', display: 'flex', alignItems: 'center', justifyContent: 'center' } }, h(Icon, { n: 'triangle-alert', s: 21 })),
+          h('div', { style: { flex: 1, minWidth: 0 } },
+            h('div', { style: { font: '600 15px/1.2 Sora, sans-serif', color: 'var(--text-strong)' } }, 'Storage not connected'),
+            h('div', { style: { font: '400 12.5px/1.4 Sora, sans-serif', color: 'var(--text-secondary)', marginTop: 4 } }, 'Your team can\u2019t push assets until a bucket is connected. Takes about two minutes.')),
+          h(Button, { variant: 'primary', size: 'sm', onClick: () => { this.setState({ draft: null, storageEditing: true }); this.go('storage'); }, iconLeft: h(Icon, { n: 'plug', s: 14 }) }, 'Set it up'));
+
+    return this.pageWrap([
+      this.pageHead('Overview', 'How ' + org.name + ' is doing right now.', null),
+      storageCard,
+      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginTop: 14 } },
+        h(StatBlock, { label: 'Seats used', value: seats, unit: '/ ' + total, accent: true, hint: (total - seats) + ' available' }),
+        h(StatBlock, { label: 'Repositories', value: org.repos.length, hint: org.repos.reduce((a, r) => a + r.blobs, 0).toLocaleString() + ' blobs' }),
+        h(StatBlock, { label: 'Stored', value: st.connected ? st.storedGB : '\u2014', unit: st.connected ? 'GB' : null, hint: st.connected ? 'in your bucket' : 'connect storage' }),
+        h(StatBlock, { label: 'Est. spend', value: '$' + (seats * org.seatPrice), unit: '/mo', delta: st.connected ? '+ ~$6 storage' : null, deltaTone: 'neutral', hint: 'seats \u00d7 $' + org.seatPrice })),
+      h('div', { style: { display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 14, marginTop: 14, alignItems: 'start' } },
+        h(Card, { pad: 'none' },
+          h('div', { style: { padding: '14px 18px', borderBottom: '1px solid var(--hairline)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
+            h('span', { style: { font: '600 14px/1 Sora, sans-serif', color: 'var(--text-strong)' } }, 'Recent activity'),
+            h('span', { style: { font: '500 11px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, 'last 7 days')),
+          h('div', null, org.activity.map((a, i) => h('div', { key: i, style: { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 18px', borderBottom: i < org.activity.length - 1 ? '1px solid var(--hairline)' : 'none' } },
+            h('span', { style: { width: 30, height: 30, flex: 'none', borderRadius: 8, background: 'color-mix(in srgb, ' + a.tint + ' 14%, transparent)', color: a.tint, display: 'flex', alignItems: 'center', justifyContent: 'center' } }, h(Icon, { n: a.icon, s: 15 })),
+            h('div', { style: { flex: 1, minWidth: 0 } },
+              h('div', { style: { font: '400 13px/1.4 Sora, sans-serif', color: 'var(--text-body)' } }, h('span', { style: { fontWeight: 600, color: 'var(--text-strong)' } }, a.who), ' ', a.what)),
+            h('span', { style: { font: '500 11px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)', flex: 'none' } }, a.when))))),
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: 14 } },
+          this.seatMeterCard(),
+          h(Card, { pad: 'lg' },
+            this.sectionLabel('Your role'),
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
+              h('span', { style: { width: 34, height: 34, borderRadius: 9, background: 'color-mix(in srgb, var(--amber-400) 14%, transparent)', color: 'var(--amber-400)', display: 'flex', alignItems: 'center', justifyContent: 'center' } }, h(Icon, { n: 'shield-check', s: 18 })),
+              h('div', null,
+                h('div', { style: { font: '600 14px/1.2 Sora, sans-serif', color: 'var(--text-strong)' } }, org.role),
+                h('div', { style: { font: '400 12px/1.3 Sora, sans-serif', color: 'var(--text-muted)' } }, 'Full access to storage, members & billing'))))))
+    ]);
+  }
+
+  seatMeterCard() {
+    const org = this.org();
+    const { Card, Button } = this.D;
+    const seats = org.members.length, total = org.seatsTotal, pending = org.invites.length;
+    const pips = [];
+    for (let i = 0; i < total; i++) {
+      const filled = i < seats, pend = i >= seats && i < seats + pending;
+      pips.push(h('span', { key: i, title: filled ? 'occupied' : pend ? 'pending invite' : 'available', style: { flex: '1 1 0', height: 26, borderRadius: 4, background: filled ? 'var(--amber-400)' : pend ? 'repeating-linear-gradient(45deg, var(--status-locked-bg), var(--status-locked-bg) 4px, transparent 4px, transparent 8px)' : 'var(--surface-sunken)', border: '1px solid ' + (filled ? 'var(--amber-500)' : pend ? 'color-mix(in srgb, var(--amber-400) 35%, transparent)' : 'var(--border-subtle)'), boxShadow: filled ? 'inset 0 1px 0 rgba(255,255,255,0.25)' : 'none', transition: 'all var(--dur-base) var(--ease-out)' } }));
+    }
+    return h(Card, { pad: 'lg' },
+      h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14 } },
+        this.sectionLabel('Seats'),
+        h('div', { style: { font: '700 15px/1 Sora, sans-serif', color: 'var(--text-strong)' } }, seats, h('span', { style: { color: 'var(--text-muted)', fontWeight: 500 } }, ' / ' + total))),
+      h('div', { style: { display: 'flex', gap: 4 } }, pips),
+      h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 } },
+        h('div', { style: { display: 'flex', gap: 14, font: '400 11.5px/1 Sora, sans-serif', color: 'var(--text-muted)' } },
+          h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 5 } }, h('span', { style: { width: 9, height: 9, borderRadius: 2, background: 'var(--amber-400)' } }), seats + ' used'),
+          pending > 0 && h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 5 } }, h('span', { style: { width: 9, height: 9, borderRadius: 2, border: '1px solid color-mix(in srgb, var(--amber-400) 40%, transparent)', background: 'var(--status-locked-bg)' } }), pending + ' pending'),
+          h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 5 } }, h('span', { style: { width: 9, height: 9, borderRadius: 2, background: 'var(--surface-sunken)', border: '1px solid var(--border-subtle)' } }), (total - seats - pending) + ' open')),
+        h(Button, { variant: 'ghost', size: 'sm', onClick: () => this.go('members'), iconLeft: h(Icon, { n: 'user-plus', s: 14 }) }, 'Invite')));
+  }
+
+  // ================= STORAGE =================
+  storage() {
+    const org = this.org();
+    const st = org.storage;
+    if (st.connected && !this.state.storageEditing) return this.storageSaved();
+    return this.storageForm();
+  }
+
+  storageForm() {
+    this.ensureDraft();
+    const d = this.state.draft || this.makeDraft(this.org());
+    const org = this.org();
+    const { Button, Card } = this.D;
+    const ts = this.state.testState;
+    const editing = org.storage.connected;
+    const field = (label, key, opts = {}) => h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, flex: opts.flex || '1 1 0', minWidth: 0 } },
+      h('label', { style: { font: '600 13px/1 Sora, sans-serif', color: 'var(--text-secondary)' } }, label, opts.optional && h('span', { style: { color: 'var(--text-muted)', fontWeight: 400 } }, '  optional')),
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, height: 'var(--control-md)', padding: '0 11px', background: 'var(--surface-sunken)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)' } },
+        opts.icon && h(Icon, { n: opts.icon, s: 15, color: 'var(--text-muted)' }),
+        h('input', { value: d[key], placeholder: opts.placeholder, type: opts.type === 'password' && !this.state.showSecret ? 'password' : 'text', onChange: e => this.setDraft(key, e.target.value), style: { flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', color: 'var(--text-body)', font: '500 13.5px/1 "Spline Sans Mono", monospace' } }),
+        opts.type === 'password' && h('button', { onClick: () => this.setState(s => ({ showSecret: !s.showSecret })), style: { border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', display: 'inline-flex' } }, h(Icon, { n: this.state.showSecret ? 'eye-off' : 'eye', s: 15 }))),
+      opts.hint && h('span', { style: { font: '400 11.5px/1.3 Sora, sans-serif', color: 'var(--text-muted)' } }, opts.hint));
+
+    return this.pageWrap([
+      this.pageHead(editing ? 'Edit storage connection' : 'Connect storage', 'The one place bucket credentials are ever entered. Test before you save.',
+        editing ? h(Button, { variant: 'ghost', size: 'sm', onClick: () => this.setState({ storageEditing: false, testState: 'idle' }) }, 'Cancel') : null),
+      h('div', { style: { display: 'flex', gap: 12, padding: '14px 16px', borderRadius: 'var(--radius-lg)', background: 'color-mix(in srgb, var(--status-mine) 8%, var(--surface-card))', border: '1px solid color-mix(in srgb, var(--status-mine) 26%, var(--border-subtle))', marginBottom: 20 } },
+        h('span', { style: { color: 'var(--status-mine)', flex: 'none', marginTop: 1 } }, h(Icon, { n: 'shield', s: 18 })),
+        h('div', { style: { font: '400 13px/1.5 Sora, sans-serif', color: 'var(--text-secondary)' } },
+          h('b', { style: { color: 'var(--text-strong)', fontWeight: 600 } }, 'Your keys never reach the desktop app. '),
+          'They\u2019re used here to mint short-lived presigned URLs and stored encrypted at rest. Lockstep keeps pointers \u2014 never your asset bytes.')),
+      h(Card, { pad: 'lg' },
+        this.sectionLabel('Provider'),
+        h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10 } },
+          Object.entries(PROVIDERS).map(([key, p]) => {
+            const sel = d.provider === key;
+            return h('button', { key, onClick: () => this.pickProvider(key),
+              style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9, padding: '16px 8px', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: sel ? 'color-mix(in srgb, var(--amber-400) 9%, var(--surface-sunken))' : 'var(--surface-sunken)', border: '1px solid ' + (sel ? 'var(--amber-400)' : 'var(--border-default)'), boxShadow: sel ? 'var(--ring-focus)' : 'none', transition: 'all var(--dur-fast)' } },
+              h('span', { style: { width: 30, height: 30, borderRadius: 8, background: p.tile, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', font: '700 13px/1 Sora, sans-serif' } }, p.label[0]),
+              h('span', { style: { font: '600 12px/1.2 Sora, sans-serif', color: sel ? 'var(--text-strong)' : 'var(--text-secondary)', textAlign: 'center' } }, p.label));
+          })),
+        h('div', { style: { marginTop: 10, font: '500 11.5px/1.3 "Spline Sans Mono", monospace', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 } }, h(Icon, { n: 'info', s: 13 }), PROVIDERS[d.provider].note),
+        h('div', { style: { height: 1, background: 'var(--hairline)', margin: '20px 0' } }),
+        h('div', { style: { display: 'flex', gap: 12 } }, field('Endpoint', 'endpoint', { icon: 'link', flex: '2 1 0', placeholder: 'https://\u2026' }), field('Region', 'region', { flex: '1 1 0' })),
+        h('div', { style: { display: 'flex', gap: 12, marginTop: 14 } }, field('Bucket', 'bucket', { icon: 'database', placeholder: 'studio-assets' }), field('Key prefix', 'prefix', { optional: true, placeholder: 'games/aurora/', hint: 'Scope all objects under one path' })),
+        h('div', { style: { display: 'flex', gap: 12, marginTop: 14 } }, field('Access key ID', 'accessKeyId', { icon: 'key-round', placeholder: 'AKIA\u2026 / R2 token id' }), field('Secret access key', 'secret', { icon: 'lock', type: 'password', placeholder: '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022' })),
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, marginTop: 22, paddingTop: 20, borderTop: '1px solid var(--hairline)' } },
+          this.testResult(),
+          h('div', { style: { flex: 1 } }),
+          h(Button, { variant: ts === 'pass' ? 'secondary' : 'primary', disabled: ts === 'testing', onClick: () => this.runTest(),
+            iconLeft: h(Icon, { n: ts === 'testing' ? 'loader-circle' : 'plug-zap', s: 15, style: ts === 'testing' ? { animation: 'ls-spin .8s linear infinite' } : {} }) }, ts === 'testing' ? 'Testing\u2026' : ts === 'pass' ? 'Re-test' : 'Test connection'),
+          h(Button, { variant: 'primary', disabled: ts !== 'pass', onClick: () => this.saveStorage(), iconLeft: h(Icon, { n: 'check', s: 15 }), style: ts !== 'pass' ? {} : { boxShadow: 'var(--glow-amber)' } }, editing ? 'Save changes' : 'Save & connect')))
+    ]);
+  }
+
+  testResult() {
+    const ts = this.state.testState;
+    if (ts === 'idle') return h('span', { style: { font: '400 12.5px/1.4 Sora, sans-serif', color: 'var(--text-muted)', maxWidth: 320 } }, 'Run a live read+write check before saving. Save unlocks on a green result.');
+    if (ts === 'testing') return h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, font: '500 13px/1 Sora, sans-serif', color: 'var(--text-secondary)' } }, h(Icon, { n: 'loader-circle', s: 15, style: { animation: 'ls-spin .8s linear infinite' }, color: 'var(--status-pending)' }), 'Reaching bucket, signing a test object\u2026');
+    if (ts === 'pass') return h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 9, padding: '7px 12px', borderRadius: 'var(--radius-pill)', background: 'var(--status-synced-bg)', font: '600 12.5px/1 Sora, sans-serif', color: 'var(--status-synced)', animation: 'ls-pop .3s var(--ease-snap)' } }, h(Icon, { n: 'circle-check-big', s: 16 }), 'Connection verified \u00b7 read + write OK \u00b7 38 ms');
+    return h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 9, padding: '7px 12px', borderRadius: 'var(--radius-pill)', background: 'var(--status-conflict-bg)', font: '600 12.5px/1 Sora, sans-serif', color: 'var(--status-conflict)' } }, h(Icon, { n: 'circle-x', s: 16 }), 'Failed \u2014 check bucket, key & secret, then retry');
+  }
+
+  storageSaved() {
+    const org = this.org();
+    const st = org.storage;
+    const { Card, Button, StatBlock } = this.D;
+    const maskKey = k => k.length > 8 ? k.slice(0, 4) + '\u2026' + k.slice(-2) : '\u2022\u2022\u2022\u2022';
+    const row = (label, value, mono = true) => h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '11px 0', borderBottom: '1px solid var(--hairline)' } },
+      h('span', { style: { font: '500 12.5px/1 Sora, sans-serif', color: 'var(--text-muted)', flex: 'none' } }, label),
+      h('span', { style: { font: (mono ? '500 13px/1.3 "Spline Sans Mono", monospace' : '500 13px/1.3 Sora, sans-serif'), color: 'var(--text-body)', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, value));
+    const folders = [
+      { p: '/Content/Maps', gb: 48 }, { p: '/Content/Characters', gb: 28 }, { p: '/Content/FX', gb: 14 }, { p: '/Content/Audio', gb: 9 }, { p: '/other', gb: 5 },
+    ];
+    const maxF = Math.max(...folders.map(f => f.gb));
+
+    return this.pageWrap([
+      this.pageHead('Storage', 'Connected and healthy. Config is read-only \u2014 rotate keys when you need to.',
+        h(Button, { variant: 'secondary', size: 'sm', onClick: () => { this.setState({ draft: this.makeDraft(org), storageEditing: true, testState: 'idle' }); }, iconLeft: h(Icon, { n: 'pencil', s: 14 }) }, 'Edit / rotate')),
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', borderRadius: 'var(--radius-lg)', background: 'color-mix(in srgb, var(--status-synced) 8%, var(--surface-card))', border: '1px solid color-mix(in srgb, var(--status-synced) 28%, var(--border-subtle))', marginBottom: 16 } },
+        h('span', { style: { width: 9, height: 9, borderRadius: '50%', background: 'var(--status-synced)', boxShadow: '0 0 10px var(--status-synced)', flex: 'none' } }),
+        h('span', { style: { font: '600 14px/1 Sora, sans-serif', color: 'var(--text-strong)' } }, 'Connected to your ' + PROVIDERS[st.provider].label + ' bucket'),
+        h('span', { style: { flex: 1 } }),
+        h('span', { style: { font: '500 12px/1 "Spline Sans Mono", monospace', color: 'var(--status-synced)' } }, 'last checked 2m ago')),
+      h('div', { style: { display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 14, alignItems: 'start' } },
+        h(Card, { pad: 'lg' },
+          this.sectionLabel('Connection \u00b7 masked'),
+          row('Provider', PROVIDERS[st.provider].label, false),
+          row('Endpoint', st.endpoint),
+          row('Region', st.region),
+          row('Bucket', st.bucket),
+          row('Key prefix', st.prefix || '\u2014'),
+          row('Access key ID', maskKey(st.accessKeyId)),
+          h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '11px 0' } },
+            h('span', { style: { font: '500 12.5px/1 Sora, sans-serif', color: 'var(--text-muted)' } }, 'Secret access key'),
+            h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 8 } },
+              h('span', { style: { font: '500 13px/1 "Spline Sans Mono", monospace', color: 'var(--text-body)', letterSpacing: '1px' } }, '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'),
+              h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 4, font: '500 10.5px/1 "Spline Sans Mono", monospace', color: 'var(--status-synced)' } }, h(Icon, { n: 'lock', s: 11 }), 'encrypted')))),
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: 14 } },
+          h('div', { style: { padding: 18, borderRadius: 'var(--radius-lg)', background: 'color-mix(in srgb, var(--status-mine) 7%, var(--surface-card))', border: '1px solid color-mix(in srgb, var(--status-mine) 24%, var(--border-subtle))' } },
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 } },
+              h('span', { style: { width: 30, height: 30, borderRadius: 8, background: 'var(--status-mine-bg)', color: 'var(--status-mine)', display: 'flex', alignItems: 'center', justifyContent: 'center' } }, h(Icon, { n: 'shield-check', s: 17 })),
+              h('span', { style: { font: '600 14px/1 Sora, sans-serif', color: 'var(--text-strong)' } }, 'Where your data lives')),
+            ...[['Your assets live in YOUR bucket', 'Lockstep never copies or proxies your bytes.'], ['Only pointers + presigned URLs', 'The server brokers short-lived signed links, nothing more.'], ['Keys encrypted at rest', 'Never stored or shown in plaintext \u2014 not even to the desktop app.']].map(([t, s], i) =>
+              h('div', { key: i, style: { display: 'flex', gap: 9, padding: '7px 0' } },
+                h(Icon, { n: 'check', s: 15, color: 'var(--status-synced)', style: { marginTop: 1, flex: 'none' } }),
+                h('div', null, h('div', { style: { font: '600 12.5px/1.3 Sora, sans-serif', color: 'var(--text-body)' } }, t), h('div', { style: { font: '400 11.5px/1.4 Sora, sans-serif', color: 'var(--text-muted)' } }, s))))),
+          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } },
+            h(StatBlock, { label: 'Est. storage', value: '$6', unit: '/mo', accent: true, hint: st.storedGB + ' GB at-rest' }),
+            h(StatBlock, { label: 'Egress billed', value: '$0', hint: 'bytes skip the server' })))),
+      h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 14, alignItems: 'start' } },
+        h(Card, { pad: 'lg' },
+          h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 16 } }, this.sectionLabel('Usage by folder'), h('span', { style: { font: '600 13px/1 "Spline Sans Mono", monospace', color: 'var(--text-strong)' } }, st.storedGB + ' GB')),
+          folders.map((f, i) => h('div', { key: i, style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 11 } },
+            h('span', { style: { width: 140, flex: 'none', font: '500 12px/1 "Spline Sans Mono", monospace', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis' } }, f.p),
+            h('div', { style: { flex: 1, height: 18, background: 'var(--surface-sunken)', borderRadius: 5, overflow: 'hidden' } }, h('div', { style: { width: (f.gb / maxF * 100) + '%', height: '100%', background: i === 0 ? 'var(--amber-400)' : 'color-mix(in srgb, var(--status-mine) ' + (70 - i * 8) + '%, var(--surface-raised))', borderRadius: 5 } })),
+            h('span', { style: { width: 48, flex: 'none', textAlign: 'right', font: '600 12px/1 "Spline Sans Mono", monospace', color: 'var(--text-body)' } }, f.gb + ' GB')))),
+        h(Card, { pad: 'lg' },
+          this.sectionLabel('Cost vs hosted Git LFS'),
+          h('div', { style: { font: '400 11.5px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)', marginTop: -6, marginBottom: 16 } }, '100 GB game \u00b7 active team \u00b7 per month'),
+          [{ label: 'GitHub Git LFS', val: 350, color: 'var(--status-conflict)', disp: '$78\u2013350+' }, { label: 'Lockstep + R2', val: 6, color: 'var(--amber-400)', disp: '~$6' }, { label: 'Lockstep + B2 + CDN', val: 2.4, color: 'var(--status-synced)', disp: '~$2' }].map(b =>
+            h('div', { key: b.label, style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 } },
+              h('span', { style: { width: 150, flex: 'none', font: '500 12.5px/1 Sora, sans-serif', color: 'var(--text-secondary)' } }, b.label),
+              h('div', { style: { flex: 1, height: 20, background: 'var(--surface-sunken)', borderRadius: 5, overflow: 'hidden' } }, h('div', { style: { width: (b.val / 350 * 100) + '%', minWidth: 8, height: '100%', background: b.color, borderRadius: 5 } })),
+              h('span', { style: { width: 74, flex: 'none', textAlign: 'right', font: '600 12.5px/1 "Spline Sans Mono", monospace', color: b.color } }, b.disp))),
+          h('div', { style: { marginTop: 6, font: '400 11.5px/1.4 Sora, sans-serif', color: 'var(--text-muted)' } }, 'You pay your storage provider directly. Lockstep bills per seat only.')))
+    ], 1040);
+  }
+
+  // ================= MEMBERS =================
+  members() {
+    const org = this.org();
+    const { Card, Button, Avatar, Badge, Segmented, Input } = this.D;
+    const canManage = org.role === 'Owner' || org.role === 'Admin';
+    const seats = org.members.length, total = org.seatsTotal;
+    const emailValid = /.+@.+\..+/.test(this.state.inviteEmail);
+
+    const memberRow = (m, i) => h('div', { key: m.email, style: { display: 'grid', gridTemplateColumns: '1fr 150px 40px', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: i < org.members.length - 1 ? '1px solid var(--hairline)' : 'none' } },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 } },
+        h(Avatar, { name: m.you ? 'You Me' : m.name, size: 32, ring: m.you }),
+        h('div', { style: { minWidth: 0 } },
+          h('div', { style: { font: '600 13.5px/1.2 Sora, sans-serif', color: 'var(--text-strong)' } }, m.name, m.you && h('span', { style: { font: '500 11px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)', marginLeft: 7 } }, 'you')),
+          h('div', { style: { font: '500 11.5px/1.2 "Spline Sans Mono", monospace', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, m.email))),
+      this.roleControl(m, canManage),
+      canManage && !m.you ? this.iconBtn('user-minus', () => this.setState({ confirm: { title: 'Remove ' + m.name + '?', body: m.name + ' will lose access to ' + org.name + ' and free up a seat. Their locks are released.', danger: 'Remove member', onOk: () => { this.patchOrg(o => ({ members: o.members.filter(x => x.email !== m.email) })); this.flash(m.name + ' removed \u00b7 seat freed', 'mine'); } } }), 'Remove') : h('span'));
+
+    return this.pageWrap([
+      this.pageHead('Members & seats', 'Invite the team, set roles, manage seats. Only Owner & Admin can manage storage, members and billing.', null),
+      this.seatMeterCard(),
+      canManage && h(Card, { pad: 'lg', style: { marginTop: 14 } },
+        this.sectionLabel('Invite by email'),
+        h('div', { style: { display: 'flex', gap: 10, alignItems: 'flex-end' } },
+          h('div', { style: { flex: 1 } }, h(Input, { placeholder: 'name@studio.com', iconLeft: h(Icon, { n: 'mail', s: 15 }), value: this.state.inviteEmail, onChange: e => this.setState({ inviteEmail: e.target.value }) })),
+          h(Segmented, { value: this.state.inviteRole, onChange: v => this.setState({ inviteRole: v }), options: [{ value: 'Member', label: 'Member' }, { value: 'Admin', label: 'Admin' }] }),
+          h(Button, { variant: 'primary', disabled: !emailValid || seats + org.invites.length >= total, iconLeft: h(Icon, { n: 'send', s: 15 }), onClick: () => {
+            this.patchOrg(o => ({ invites: [{ email: this.state.inviteEmail, role: this.state.inviteRole, sent: 'just now' }, ...o.invites] }));
+            this.flash('Invite sent to ' + this.state.inviteEmail, 'mine');
+            this.setState({ inviteEmail: '' });
+          } }, 'Send invite')),
+        seats + org.invites.length >= total && h('div', { style: { marginTop: 10, font: '400 12px/1.3 Sora, sans-serif', color: 'var(--status-locked)' } }, 'All seats are spoken for. Free a seat or raise your plan limit in Billing.')),
+      org.invites.length > 0 && h('div', { style: { marginTop: 22 } },
+        this.sectionLabel('Pending invites \u00b7 ' + org.invites.length),
+        h(Card, { pad: 'none' }, org.invites.map((iv, i) => h('div', { key: iv.email, style: { display: 'grid', gridTemplateColumns: '1fr 150px 40px', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: i < org.invites.length - 1 ? '1px solid var(--hairline)' : 'none' } },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 } },
+            h('span', { style: { width: 32, height: 32, borderRadius: '50%', border: '1.5px dashed var(--border-strong)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', flex: 'none' } }, h(Icon, { n: 'mail', s: 15 })),
+            h('div', { style: { minWidth: 0 } },
+              h('div', { style: { font: '600 13px/1.2 "Spline Sans Mono", monospace', color: 'var(--text-body)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, iv.email),
+              h('div', { style: { font: '400 11.5px/1.2 Sora, sans-serif', color: 'var(--text-muted)' } }, 'Invited ' + iv.sent + ' \u00b7 awaiting sign-in'))),
+          h(Badge, { tone: ROLE_TONE[iv.role], dot: true }, iv.role),
+          canManage ? this.iconBtn('x', () => { this.patchOrg(o => ({ invites: o.invites.filter(x => x.email !== iv.email) })); this.flash('Invite to ' + iv.email + ' revoked', 'locked'); }, 'Revoke') : h('span'))))),
+      h('div', { style: { marginTop: 22 } },
+        this.sectionLabel('Members \u00b7 ' + org.members.length),
+        h(Card, { pad: 'none' }, org.members.map(memberRow)))
+    ]);
+  }
+
+  roleControl(m, canManage) {
+    const { Badge } = this.D;
+    if (!canManage || m.you) return h('div', null, h(Badge, { tone: ROLE_TONE[m.role], dot: true }, m.role));
+    const open = this.state.roleMenu === m.email;
+    return h('div', { style: { position: 'relative' } },
+      h('button', { onClick: () => this.setState(s => ({ roleMenu: open ? null : m.email })),
+        onMouseEnter: e => e.currentTarget.style.borderColor = 'var(--border-strong)', onMouseLeave: e => e.currentTarget.style.borderColor = 'var(--border-default)',
+        style: { display: 'flex', alignItems: 'center', gap: 7, height: 30, padding: '0 8px 0 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-default)', background: 'var(--surface-sunken)', cursor: 'pointer', font: '600 12.5px/1 Sora, sans-serif', color: 'var(--text-body)' } },
+        h('span', { style: { width: 6, height: 6, borderRadius: '50%', background: m.role === 'Owner' ? 'var(--amber-400)' : m.role === 'Admin' ? 'var(--status-mine)' : 'var(--slate-400)' } }),
+        m.role, h(Icon, { n: 'chevron-down', s: 13, color: 'var(--text-muted)' })),
+      open && h(React.Fragment, null,
+        h('div', { onClick: () => this.setState({ roleMenu: null }), style: { position: 'fixed', inset: 0, zIndex: 60 } }),
+        h('div', { style: { position: 'absolute', top: 34, right: 0, width: 150, padding: 5, background: 'var(--surface-raised)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)', zIndex: 70 } },
+          ['Owner', 'Admin', 'Member'].map(r => h('button', { key: r, onClick: () => { this.patchOrg(o => ({ members: o.members.map(x => x.email === m.email ? { ...x, role: r } : x) })); this.setState({ roleMenu: null }); this.flash(m.name + ' is now ' + r, 'mine'); },
+            onMouseEnter: e => e.currentTarget.style.background = 'var(--surface-hover)', onMouseLeave: e => e.currentTarget.style.background = 'transparent',
+            style: { display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 8px', border: 'none', background: 'transparent', borderRadius: 'var(--radius-sm)', cursor: 'pointer', font: '500 12.5px/1 Sora, sans-serif', color: 'var(--text-body)', textAlign: 'left' } },
+            h('span', { style: { width: 6, height: 6, borderRadius: '50%', background: r === 'Owner' ? 'var(--amber-400)' : r === 'Admin' ? 'var(--status-mine)' : 'var(--slate-400)' } }),
+            h('span', { style: { flex: 1 } }, r), m.role === r && h(Icon, { n: 'check', s: 14, color: 'var(--amber-400)' }))))));
+  }
+
+  // ================= REPOSITORIES =================
+  repos() {
+    const org = this.org();
+    const { Card, Button } = this.D;
+    return this.pageWrap([
+      this.pageHead('Repositories', org.repos.length + ' repos \u00b7 code in git, big assets in your bucket.',
+        h(Button, { variant: 'primary', size: 'sm', iconLeft: h(Icon, { n: 'plus', s: 15 }), onClick: () => this.setState({ confirm: { create: true }, newOrgName: '' }) }, 'New repository')),
+      org.repos.length === 0
+        ? this.emptyState('box', 'No repositories yet', 'Create your first repo, then clone it with the snippet we generate.', 'New repository', () => this.setState({ confirm: { create: true }, newOrgName: '' }))
+        : h(Card, { pad: 'none' },
+          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 90px 90px 120px 28px', gap: 12, padding: '10px 18px', borderBottom: '1px solid var(--hairline)', font: '600 10px/1 "Spline Sans Mono", monospace', letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-muted)' } },
+            h('span', null, 'Repository'), h('span', { style: { textAlign: 'right' } }, 'Size'), h('span', { style: { textAlign: 'right' } }, 'Locks'), h('span', { style: { textAlign: 'right' } }, 'Activity'), h('span')),
+          org.repos.map((r, i) => h('button', { key: r.slug, onClick: () => this.setState({ repoOpen: r.slug }),
+            onMouseEnter: e => e.currentTarget.style.background = 'var(--surface-hover)', onMouseLeave: e => e.currentTarget.style.background = 'transparent',
+            style: { display: 'grid', gridTemplateColumns: '1fr 90px 90px 120px 28px', gap: 12, alignItems: 'center', width: '100%', padding: '13px 18px', border: 'none', borderBottom: i < org.repos.length - 1 ? '1px solid var(--hairline)' : 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' } },
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 } },
+              h('span', { style: { width: 30, height: 30, flex: 'none', borderRadius: 8, background: 'color-mix(in srgb, var(--amber-400) 14%, var(--surface-sunken))', color: 'var(--amber-400)', display: 'flex', alignItems: 'center', justifyContent: 'center' } }, h(Icon, { n: 'box', s: 16 })),
+              h('div', { style: { minWidth: 0 } },
+                h('div', { style: { font: '600 13.5px/1.2 Sora, sans-serif', color: 'var(--text-strong)' } }, r.name),
+                h('div', { style: { font: '500 11px/1.2 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, 'git \u00b7 ' + r.branch))),
+            h('span', { style: { textAlign: 'right', font: '600 12.5px/1 "Spline Sans Mono", monospace', color: 'var(--text-body)' } }, r.sizeGB + ' GB'),
+            h('span', { style: { textAlign: 'right' } }, r.locks > 0 ? h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 4, font: '600 12px/1 "Spline Sans Mono", monospace', color: 'var(--status-locked)' } }, h(Icon, { n: 'lock', s: 12 }), r.locks) : h('span', { style: { font: '500 12px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, '\u2014')),
+            h('span', { style: { textAlign: 'right', font: '500 11.5px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, r.activity),
+            h(Icon, { n: 'chevron-right', s: 16, color: 'var(--text-muted)' }))))
+    ]);
+  }
+
+  repoDetail() {
+    const org = this.org();
+    const r = org.repos.find(x => x.slug === this.state.repoOpen);
+    const { Card, Button, Avatar, Badge, StatBlock } = this.D;
+    const cloneUrl = 'https://api.lockstepcloud.com/' + org.slug + '/' + r.slug;
+    const lfs = '[lfs]\n  url = "' + cloneUrl + '/info/lfs"\n[lock]\n  enforce = true   # Perforce-grade exclusive locks';
+    const copyBtn = (text) => h('button', { onClick: () => { try { navigator.clipboard && navigator.clipboard.writeText(text); } catch (e) {} this.flash('Copied to clipboard', 'mine'); },
+      onMouseEnter: e => e.currentTarget.style.color = 'var(--text-strong)', onMouseLeave: e => e.currentTarget.style.color = 'var(--text-muted)',
+      style: { display: 'inline-flex', alignItems: 'center', gap: 6, height: 28, padding: '0 9px', border: '1px solid var(--border-default)', background: 'var(--surface-raised)', borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)', cursor: 'pointer', font: '500 11.5px/1 Sora, sans-serif' } }, h(Icon, { n: 'copy', s: 13 }), 'Copy');
+    const codeBlock = (label, code) => h('div', { style: { marginBottom: 14 } },
+      h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 } },
+        h('span', { style: { font: '500 12px/1 Sora, sans-serif', color: 'var(--text-secondary)' } }, label), copyBtn(code)),
+      h('pre', { style: { margin: 0, padding: '12px 14px', background: 'var(--surface-sunken)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', overflowX: 'auto', font: '500 12.5px/1.6 "Spline Sans Mono", monospace', color: 'var(--text-body)', whiteSpace: 'pre' } }, code));
+
+    return this.pageWrap([
+      h('button', { onClick: () => this.setState({ repoOpen: null }), onMouseEnter: e => e.currentTarget.style.color = 'var(--text-body)', onMouseLeave: e => e.currentTarget.style.color = 'var(--text-muted)', style: { display: 'inline-flex', alignItems: 'center', gap: 6, border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', font: '500 12.5px/1 Sora, sans-serif', marginBottom: 16, padding: 0 } }, h(Icon, { n: 'arrow-left', s: 15 }), 'Repositories'),
+      this.pageHead(r.name, 'git \u00b7 ' + r.branch + ' \u00b7 in ' + org.name,
+        h(Button, { variant: 'secondary', size: 'sm', iconLeft: h(Icon, { n: 'external-link', s: 14 }), onClick: () => this.flash('Opening bucket browser \u2014 demo', 'mine') }, 'Open bucket')),
+      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 14 } },
+        h(StatBlock, { label: 'Storage used', value: r.sizeGB, unit: 'GB', hint: r.blobs.toLocaleString() + ' blobs' }),
+        h(StatBlock, { label: 'Active locks', value: r.locks, accent: r.locks > 0, hint: r.lockList.filter(l => l.stale).length + ' stale' }),
+        h(StatBlock, { label: 'Last activity', value: r.activity === 'never' ? '\u2014' : r.activity.split(' ')[0], unit: r.activity === 'never' ? null : r.activity.split(' ').slice(1).join(' '), hint: r.branch })),
+      h(Card, { pad: 'lg', style: { marginBottom: 14 } },
+        this.sectionLabel('Clone & configure'),
+        codeBlock('Clone the repo', 'git clone ' + cloneUrl + '.git'),
+        codeBlock('.lfsconfig \u2014 point LFS + locks at Lockstep', lfs)),
+      h(Card, { pad: 'none', style: { marginBottom: 14 } },
+        h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--hairline)' } },
+          h('span', { style: { font: '600 14px/1 Sora, sans-serif', color: 'var(--text-strong)' } }, 'Lock overview'),
+          h('span', { style: { font: '500 11.5px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, 'read-only \u00b7 ' + r.lockList.length + ' active')),
+        r.lockList.length === 0
+          ? h('div', { style: { padding: '28px 18px', textAlign: 'center', font: '400 13px/1.4 Sora, sans-serif', color: 'var(--text-muted)' } }, 'No active locks. Files are free to check out.')
+          : r.lockList.map((l, i) => h('div', { key: l.path, style: { display: 'grid', gridTemplateColumns: '1fr 170px 110px', gap: 12, alignItems: 'center', padding: '11px 18px', borderBottom: i < r.lockList.length - 1 ? '1px solid var(--hairline)' : 'none' } },
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 } },
+              h(Icon, { n: 'lock', s: 14, color: l.state === 'mine' ? 'var(--status-mine)' : 'var(--status-locked)' }),
+              h('span', { style: { font: '500 12.5px/1.3 "Spline Sans Mono", monospace', color: 'var(--text-body)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, l.path)),
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } }, h(Avatar, { name: l.owner === 'You' ? 'You Me' : l.owner, size: 22, ring: l.state === 'mine' }), h('span', { style: { font: '500 12.5px/1 Sora, sans-serif', color: l.state === 'mine' ? 'var(--status-mine)' : 'var(--text-secondary)' } }, l.owner)),
+            h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 } }, h('span', { style: { font: '500 12px/1 "Spline Sans Mono", monospace', color: l.stale ? 'var(--status-conflict)' : 'var(--text-muted)' } }, l.age), l.stale && h(Badge, { tone: 'red' }, 'stale'))))),
+      h('div', { style: { borderRadius: 'var(--radius-lg)', border: '1px solid color-mix(in srgb, var(--status-conflict) 32%, var(--border-subtle))', background: 'color-mix(in srgb, var(--status-conflict) 5%, var(--surface-card))', padding: 18 } },
+        h('div', { style: { font: '600 13px/1 Sora, sans-serif', color: 'var(--status-conflict)', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 7 } }, h(Icon, { n: 'triangle-alert', s: 15 }), 'Danger zone'),
+        [['Archive repository', 'Make read-only. Locks release; history & blobs are kept.', 'Archive', false], ['Delete repository', 'Permanently remove git history and all blob pointers. Bytes stay in your bucket.', 'Delete', true]].map(([t, s, btn, danger], i) =>
+          h('div', { key: t, style: { display: 'flex', alignItems: 'center', gap: 16, padding: '12px 0', borderTop: i > 0 ? '1px solid var(--hairline)' : 'none' } },
+            h('div', { style: { flex: 1 } }, h('div', { style: { font: '600 13px/1.2 Sora, sans-serif', color: 'var(--text-body)' } }, t), h('div', { style: { font: '400 12px/1.4 Sora, sans-serif', color: 'var(--text-muted)', marginTop: 2 } }, s)),
+            h(Button, { variant: danger ? 'danger' : 'outline', size: 'sm', onClick: () => this.setState({ confirm: { title: t + '?', body: s, danger: btn + ' ' + r.name, onOk: () => { this.patchOrg(o => ({ repos: o.repos.filter(x => x.slug !== r.slug) })); this.setState({ repoOpen: null }); this.flash(r.name + ' ' + btn.toLowerCase() + 'd', 'locked'); } } }) }, btn))))
+    ], 920);
+  }
+
+  // ================= TOKENS =================
+  tokens() {
+    const org = this.org();
+    const { Card, Button, Badge } = this.D;
+    const scopeTone = { lock: 'amber', read: 'blue', write: 'green' };
+    return this.pageWrap([
+      this.pageHead('Access tokens', 'Personal access tokens for the Unreal plugin, CLI & CI. Prefixed lsk_ \u00b7 shown once.',
+        h(Button, { variant: 'primary', size: 'sm', iconLeft: h(Icon, { n: 'plus', s: 15 }), onClick: () => this.setState({ tokenModal: { step: 'form', name: '', scopes: { lock: true, read: true, write: false } } }) }, 'Generate token')),
+      org.tokens.length === 0
+        ? this.emptyState('key-round', 'No tokens yet', 'Generate a token to authenticate the Unreal plugin, the CLI or CI against this org.', 'Generate token', () => this.setState({ tokenModal: { step: 'form', name: '', scopes: { lock: true, read: true, write: false } } }))
+        : h(Card, { pad: 'none' }, org.tokens.map((t, i) => h('div', { key: t.last4, style: { display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', borderBottom: i < org.tokens.length - 1 ? '1px solid var(--hairline)' : 'none' } },
+          h('span', { style: { width: 32, height: 32, flex: 'none', borderRadius: 8, background: 'var(--surface-sunken)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' } }, h(Icon, { n: 'key-round', s: 16 })),
+          h('div', { style: { flex: 1, minWidth: 0 } },
+            h('div', { style: { font: '600 13.5px/1.2 Sora, sans-serif', color: 'var(--text-strong)' } }, t.name),
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' } },
+              h('span', { style: { font: '500 12px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, 'lsk_\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022' + t.last4),
+              h('span', { style: { font: '400 11px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, '\u00b7 created ' + t.created + ' \u00b7 used ' + t.used))),
+          h('div', { style: { display: 'flex', gap: 5 } }, t.scopes.map(s => h(Badge, { key: s, tone: scopeTone[s] }, s))),
+          this.iconBtn('trash-2', () => this.setState({ confirm: { title: 'Revoke this token?', body: '"' + t.name + '" stops working immediately. Anything using it (plugin, CI) must be re-authed.', danger: 'Revoke token', onOk: () => { this.patchOrg(o => ({ tokens: o.tokens.filter(x => x.last4 !== t.last4) })); this.flash('Token revoked', 'locked'); } } }), 'Revoke'))))
+    ]);
+  }
+
+  // ================= BILLING =================
+  billing() {
+    const org = this.org();
+    const { Card, Button, StatBlock, Badge } = this.D;
+    const seats = org.members.length, monthly = seats * org.seatPrice;
+    return this.pageWrap([
+      this.pageHead('Billing', 'You pay per seat. Your storage is your own bucket \u2014 Lockstep never touches those bytes.', null),
+      h('div', { style: { display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 14, alignItems: 'start' } },
+        h(Card, { pad: 'lg' },
+          h('div', { style: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18 } },
+            h('div', null, this.sectionLabel('Current plan'),
+              h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } }, h('span', { style: { font: '700 22px/1 Sora, sans-serif', color: 'var(--text-strong)' } }, org.plan), h(Badge, { tone: 'green', dot: true }, 'active'))),
+            h(Button, { variant: 'secondary', size: 'sm', onClick: () => this.flash('Plan management \u2014 demo', 'mine') }, 'Change plan')),
+          h('div', { style: { display: 'flex', alignItems: 'flex-end', gap: 6, padding: '16px 0', borderTop: '1px solid var(--hairline)', borderBottom: '1px solid var(--hairline)' } },
+            h('span', { style: { font: '700 40px/1 Sora, sans-serif', color: 'var(--text-strong)', letterSpacing: '-0.02em' } }, '$' + monthly),
+            h('span', { style: { font: '500 14px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)', marginBottom: 6 } }, '/ mo')),
+          h('div', { style: { display: 'flex', justifyContent: 'space-between', padding: '14px 0 4px', font: '400 13px/1.4 Sora, sans-serif', color: 'var(--text-secondary)' } },
+            h('span', null, seats + ' seats \u00d7 $' + org.seatPrice + ' / seat'), h('span', { style: { font: '600 13px/1 "Spline Sans Mono", monospace', color: 'var(--text-body)' } }, '$' + monthly + '.00')),
+          h('div', { style: { display: 'flex', justifyContent: 'space-between', padding: '8px 0', font: '400 13px/1.4 Sora, sans-serif', color: 'var(--text-secondary)' } },
+            h('span', null, 'Storage (your ' + PROVIDERS[org.storage.provider].label + ' bucket)'), h('span', { style: { font: '600 13px/1 "Spline Sans Mono", monospace', color: 'var(--status-synced)' } }, org.storage.connected ? '~$6 \u00b7 billed by provider' : 'not connected')),
+          h('div', { style: { display: 'flex', gap: 8, marginTop: 14, padding: '12px 14px', borderRadius: 'var(--radius-md)', background: 'var(--status-synced-bg)', font: '400 12.5px/1.5 Sora, sans-serif', color: 'var(--text-secondary)' } }, h(Icon, { n: 'info', s: 15, color: 'var(--status-synced)', style: { flex: 'none', marginTop: 1 } }), h('span', null, h('b', { style: { color: 'var(--text-strong)', fontWeight: 600 } }, '$0 egress.'), ' Clones pull from your bucket directly \u2014 there\u2019s no per-clone bandwidth bill from Lockstep.'))),
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: 14 } },
+          h(Card, { pad: 'lg' }, this.sectionLabel('Payment method'),
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 12 } },
+              h('span', { style: { width: 42, height: 30, borderRadius: 6, background: 'linear-gradient(135deg,#2a3543,#161c24)', border: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' } }, h(Icon, { n: 'credit-card', s: 16 })),
+              h('div', { style: { flex: 1 } }, h('div', { style: { font: '600 13px/1.2 "Spline Sans Mono", monospace', color: 'var(--text-body)' } }, 'Visa \u00b7\u00b7\u00b7\u00b7 4242'), h('div', { style: { font: '400 11.5px/1 Sora, sans-serif', color: 'var(--text-muted)', marginTop: 3 } }, 'Expires 08 / 28')),
+              this.iconBtn('pencil', () => this.flash('Update card \u2014 demo', 'mine'), 'Update'))),
+          h(StatBlock, { label: 'Next invoice', value: '$' + monthly, unit: '/mo', accent: true, hint: 'renews 01 Jul 2026' }))),
+      h('div', { style: { marginTop: 22 } }, this.sectionLabel('Invoices'),
+        h(Card, { pad: 'none' }, org.invoices.map((inv, i) => h('div', { key: inv.id, style: { display: 'grid', gridTemplateColumns: '1fr 130px 90px 90px', alignItems: 'center', gap: 12, padding: '13px 18px', borderBottom: i < org.invoices.length - 1 ? '1px solid var(--hairline)' : 'none' } },
+          h('span', { style: { font: '600 12.5px/1 "Spline Sans Mono", monospace', color: 'var(--text-body)' } }, inv.id),
+          h('span', { style: { font: '400 12.5px/1 Sora, sans-serif', color: 'var(--text-muted)' } }, inv.date),
+          h(Badge, { tone: 'green', dot: true }, inv.status),
+          h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12 } }, h('span', { style: { font: '600 13px/1 "Spline Sans Mono", monospace', color: 'var(--text-strong)' } }, '$' + inv.amount), h('button', { onClick: () => this.flash('Downloading ' + inv.id + ' \u2014 demo', 'mine'), style: { border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', display: 'inline-flex' } }, h(Icon, { n: 'download', s: 15 })))))))
+    ], 1000);
+  }
+
+  // ================= SETTINGS =================
+  settings() {
+    const org = this.org();
+    const { Card, Button, Input, Switch, Segmented, Avatar } = this.D;
+    return this.pageWrap([
+      this.pageHead('Settings', 'Organization, security policy and your profile.', null),
+      h(Card, { pad: 'lg', style: { marginBottom: 14 } }, this.sectionLabel('Organization'),
+        h('div', { style: { display: 'flex', gap: 12 } },
+          h(Input, { label: 'Organization name', defaultValue: org.name, style: { flex: 2 } }),
+          h('div', { style: { flex: 1, display: 'flex', flexDirection: 'column', gap: 6 } },
+            h('span', { style: { font: '600 13px/1 Sora, sans-serif', color: 'var(--text-secondary)' } }, 'Slug'),
+            h('div', { style: { display: 'flex', alignItems: 'center', height: 'var(--control-md)', padding: '0 11px', background: 'var(--surface-sunken)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', font: '500 13px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, org.slug))),
+        h('div', { style: { marginTop: 16 } }, h(Button, { variant: 'secondary', size: 'sm', onClick: () => this.flash('Organization updated', 'mine') }, 'Save changes'))),
+      h(Card, { pad: 'lg', style: { marginBottom: 14 } }, this.sectionLabel('Security'),
+        h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '6px 0 16px', borderBottom: '1px solid var(--hairline)' } },
+          h('div', { style: { maxWidth: 440 } }, h('div', { style: { font: '600 13.5px/1.2 Sora, sans-serif', color: 'var(--text-body)' } }, 'Presigned URL lifetime'), h('div', { style: { font: '400 12px/1.45 Sora, sans-serif', color: 'var(--text-muted)', marginTop: 3 } }, 'How long a signed blob link stays valid. Shorter is safer; longer survives slow uploads.')),
+          h(Segmented, { value: String(org.ttl), onChange: v => this.patchOrg({ ttl: +v }), options: [{ value: '5', label: '5 min' }, { value: '15', label: '15 min' }, { value: '60', label: '60 min' }] })),
+        h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '16px 0 6px' } },
+          h('div', { style: { maxWidth: 440 } }, h('div', { style: { font: '600 13.5px/1.2 Sora, sans-serif', color: 'var(--text-body)' } }, 'Default lock policy'), h('div', { style: { font: '400 12px/1.45 Sora, sans-serif', color: 'var(--text-muted)', marginTop: 3 } }, 'Hard exclusive blocks a second editor outright (Perforce-style). Soft advises but allows override.')),
+          h(Segmented, { value: org.lockPolicy, onChange: v => this.patchOrg({ lockPolicy: v }), options: [{ value: 'hard', label: 'Hard exclusive' }, { value: 'soft', label: 'Soft / advisory' }] }))),
+      h(Card, { pad: 'lg' }, this.sectionLabel('Your profile'),
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 } },
+          h(Avatar, { name: 'You Me', size: 52, ring: true }),
+          h('div', { style: { flex: 1 } }, h('div', { style: { font: '600 15px/1.2 Sora, sans-serif', color: 'var(--text-strong)' } }, 'You'), h('div', { style: { font: '500 12px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)', marginTop: 4 } }, 'you@auroragames.dev \u00b7 via GitHub')),
+          h(Button, { variant: 'ghost', size: 'sm', iconLeft: h(Icon, { n: 'github', s: 14 }) }, 'Connected')),
+        h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 0 0', borderTop: '1px solid var(--hairline)' } },
+          h('div', null, h('div', { style: { font: '600 13.5px/1.2 Sora, sans-serif', color: 'var(--text-body)' } }, 'Appearance'), h('div', { style: { font: '400 12px/1.3 Sora, sans-serif', color: 'var(--text-muted)', marginTop: 3 } }, 'Dark is the precision default. Light for bright rooms.')),
+          h(Switch, { checked: this.state.theme === 'light', onChange: () => this.setState(s => ({ theme: s.theme === 'dark' ? 'light' : 'dark' })), label: this.state.theme === 'light' ? 'Light' : 'Dark' })))
+    ]);
+  }
+
+  emptyState(icon, title, body, btn, onClick) {
+    const { Button } = this.D;
+    return h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '60px 20px', border: '1px dashed var(--border-default)', borderRadius: 'var(--radius-lg)', background: 'var(--surface-card)' } },
+      h('span', { style: { width: 52, height: 52, borderRadius: 13, background: 'var(--surface-sunken)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 } }, h(Icon, { n: icon, s: 24 })),
+      h('div', { style: { font: '600 16px/1.2 Sora, sans-serif', color: 'var(--text-strong)' } }, title),
+      h('div', { style: { font: '400 13px/1.5 Sora, sans-serif', color: 'var(--text-muted)', maxWidth: 340, marginTop: 8, marginBottom: 20 } }, body),
+      h(Button, { variant: 'primary', iconLeft: h(Icon, { n: 'plus', s: 15 }), onClick }, btn));
+  }
+
+  // ================= OVERLAYS =================
+  toastEl() {
+    const t = this.state.toast;
+    if (!t) return null;
+    return h('div', { style: { position: 'fixed', bottom: 22, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 10, padding: '11px 18px', background: 'var(--surface-raised)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-pill)', boxShadow: 'var(--shadow-lg)', zIndex: 900, animation: 'ls-rise .3s var(--ease-out)' } },
+      h('span', { style: { width: 8, height: 8, borderRadius: '50%', background: 'var(--status-' + t.tone + ')', boxShadow: '0 0 8px var(--status-' + t.tone + ')' } }),
+      h('span', { style: { font: '500 13px/1 Sora, sans-serif', color: 'var(--text-body)' } }, t.msg));
+  }
+
+  modalShell(onClose, width, children) {
+    return h('div', { onClick: onClose, style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 800, animation: 'ls-fade .16s var(--ease-out)' } },
+      h('div', { onClick: e => e.stopPropagation(), style: { width, maxWidth: '92vw', background: 'var(--surface-card)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-xl)', overflow: 'hidden', animation: 'ls-pop .2s var(--ease-out)' } }, children));
+  }
+
+  confirmEl() {
+    const c = this.state.confirm;
+    if (!c) return null;
+    if (c.create) return this.createRepoDialog();
+    const { Button } = this.D;
+    return this.modalShell(() => this.setState({ confirm: null }), 440, [
+      h('div', { key: 'b', style: { display: 'flex', gap: 13, padding: 22 } },
+        h('span', { style: { width: 38, height: 38, flex: 'none', borderRadius: 10, background: 'var(--status-conflict-bg)', color: 'var(--status-conflict)', display: 'flex', alignItems: 'center', justifyContent: 'center' } }, h(Icon, { n: 'triangle-alert', s: 19 })),
+        h('div', null, h('div', { style: { font: '600 16px/1.3 Sora, sans-serif', color: 'var(--text-strong)' } }, c.title), h('div', { style: { font: '400 13px/1.5 Sora, sans-serif', color: 'var(--text-muted)', marginTop: 7 } }, c.body))),
+      h('div', { key: 'a', style: { display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '14px 22px', borderTop: '1px solid var(--hairline)' } },
+        h(Button, { variant: 'ghost', onClick: () => this.setState({ confirm: null }) }, 'Cancel'),
+        h(Button, { variant: 'danger', onClick: () => { c.onOk && c.onOk(); this.setState({ confirm: null }); } }, c.danger))
+    ]);
+  }
+
+  createRepoDialog() {
+    const { Button, Input } = this.D;
+    const name = this.state.newOrgName;
+    const slug = (name || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    return this.modalShell(() => this.setState({ confirm: null, newOrgName: '' }), 460, [
+      h('div', { key: 'b', style: { padding: 22 } },
+        h('div', { style: { font: '600 16px/1.2 Sora, sans-serif', color: 'var(--text-strong)', marginBottom: 4 } }, 'New repository'),
+        h('div', { style: { font: '400 13px/1.5 Sora, sans-serif', color: 'var(--text-muted)', marginBottom: 18 } }, 'Code goes in git; big binary assets stream to your bucket.'),
+        h(Input, { label: 'Repository name', placeholder: 'arena-shooter', autoFocus: true, value: name, onChange: e => this.setState({ newOrgName: e.target.value }) }),
+        h('div', { style: { marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6 } },
+          h('span', { style: { font: '600 13px/1 Sora, sans-serif', color: 'var(--text-secondary)' } }, 'Clone URL'),
+          h('div', { style: { display: 'flex', alignItems: 'center', height: 'var(--control-md)', padding: '0 11px', background: 'var(--surface-sunken)', border: '1px dashed var(--border-default)', borderRadius: 'var(--radius-md)', font: '500 12.5px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)', overflow: 'hidden', whiteSpace: 'nowrap' } },
+            'api.lockstepcloud.com/' + this.org().slug + '/', h('span', { style: { color: name ? 'var(--amber-300)' : 'var(--text-muted)' } }, slug || 'name')))),
+      h('div', { key: 'a', style: { display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '14px 22px', borderTop: '1px solid var(--hairline)' } },
+        h(Button, { variant: 'ghost', onClick: () => this.setState({ confirm: null, newOrgName: '' }) }, 'Cancel'),
+        h(Button, { variant: 'primary', disabled: !slug, iconLeft: h(Icon, { n: 'box', s: 15 }), onClick: () => {
+          this.patchOrg(o => ({ repos: [{ name: name.trim(), slug, sizeGB: 0, blobs: 0, locks: 0, activity: 'just now', branch: 'main', lockList: [] }, ...o.repos] }));
+          this.setState({ confirm: null, newOrgName: '', repoOpen: slug });
+          this.flash('Repository ' + name.trim() + ' created', 'mine');
+        } }, 'Create repository'))
+    ]);
+  }
+
+  tokenDialogEl() {
+    const m = this.state.tokenModal;
+    if (!m) return null;
+    const { Button, Input } = this.D;
+    const scopeDefs = [
+      { key: 'lock', label: 'lock', desc: 'Acquire & release file locks', tone: 'var(--status-locked)' },
+      { key: 'read', label: 'read', desc: 'Pull blobs & read lock table', tone: 'var(--status-mine)' },
+      { key: 'write', label: 'write', desc: 'Push blobs & commit refs', tone: 'var(--status-synced)' },
+    ];
+    if (m.step === 'form') {
+      const valid = m.name.trim() && Object.values(m.scopes).some(Boolean);
+      return this.modalShell(() => this.setState({ tokenModal: null }), 480, [
+        h('div', { key: 'b', style: { padding: 22 } },
+          h('div', { style: { font: '600 16px/1.2 Sora, sans-serif', color: 'var(--text-strong)', marginBottom: 4 } }, 'Generate access token'),
+          h('div', { style: { font: '400 13px/1.5 Sora, sans-serif', color: 'var(--text-muted)', marginBottom: 18 } }, 'Shown once at creation. Store it in your plugin or CI secret.'),
+          h(Input, { label: 'Token name', placeholder: 'Unreal plugin \u00b7 my workstation', autoFocus: true, value: m.name, onChange: e => this.setState(s => ({ tokenModal: { ...s.tokenModal, name: e.target.value } })) }),
+          h('div', { style: { marginTop: 18 } }, this.sectionLabel('Scopes'),
+            h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } }, scopeDefs.map(sd => {
+              const on = m.scopes[sd.key];
+              return h('button', { key: sd.key, onClick: () => this.setState(s => ({ tokenModal: { ...s.tokenModal, scopes: { ...s.tokenModal.scopes, [sd.key]: !on } } })),
+                style: { display: 'flex', alignItems: 'center', gap: 12, padding: '11px 13px', borderRadius: 'var(--radius-md)', cursor: 'pointer', textAlign: 'left', background: on ? 'color-mix(in srgb, ' + sd.tone + ' 9%, var(--surface-sunken))' : 'var(--surface-sunken)', border: '1px solid ' + (on ? 'color-mix(in srgb, ' + sd.tone + ' 45%, transparent)' : 'var(--border-default)') } },
+                h('span', { style: { width: 18, height: 18, flex: 'none', borderRadius: 5, border: '1.5px solid ' + (on ? sd.tone : 'var(--border-strong)'), background: on ? sd.tone : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0a0d11' } }, on && h(Icon, { n: 'check', s: 13, sw: 3 })),
+                h('span', { style: { font: '600 13px/1 "Spline Sans Mono", monospace', color: on ? sd.tone : 'var(--text-secondary)', width: 48 } }, sd.label),
+                h('span', { style: { flex: 1, font: '400 12px/1.3 Sora, sans-serif', color: 'var(--text-muted)' } }, sd.desc));
+            })))),
+        h('div', { key: 'a', style: { display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '14px 22px', borderTop: '1px solid var(--hairline)' } },
+          h(Button, { variant: 'ghost', onClick: () => this.setState({ tokenModal: null }) }, 'Cancel'),
+          h(Button, { variant: 'primary', disabled: !valid, iconLeft: h(Icon, { n: 'key-round', s: 15 }), onClick: () => {
+            const rand = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+            const last4 = rand.slice(-4);
+            const value = 'lsk_' + rand.slice(0, 8) + rand.slice(0, 24);
+            this.setState(s => ({ tokenModal: { ...s.tokenModal, step: 'show', value, last4 } }));
+          } }, 'Generate'))
+      ]);
+    }
+    // show step
+    const scopes = scopeDefs.filter(sd => m.scopes[sd.key]).map(sd => sd.key);
+    return this.modalShell(() => this.commitToken(m, scopes), 520, [
+      h('div', { key: 'b', style: { padding: 22 } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 9, marginBottom: 6 } },
+          h('span', { style: { width: 28, height: 28, borderRadius: 7, background: 'var(--status-synced-bg)', color: 'var(--status-synced)', display: 'flex', alignItems: 'center', justifyContent: 'center' } }, h(Icon, { n: 'circle-check-big', s: 16 })),
+          h('div', { style: { font: '600 16px/1.2 Sora, sans-serif', color: 'var(--text-strong)' } }, 'Token created')),
+        h('div', { style: { display: 'flex', gap: 8, padding: '10px 13px', borderRadius: 'var(--radius-md)', background: 'var(--status-locked-bg)', font: '400 12px/1.45 Sora, sans-serif', color: 'var(--amber-200)', margin: '8px 0 16px' } },
+          h(Icon, { n: 'triangle-alert', s: 15, color: 'var(--amber-300)', style: { flex: 'none', marginTop: 1 } }),
+          h('span', null, 'Copy it now \u2014 this is the only time the full token is shown.')),
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px', background: 'var(--surface-sunken)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)' } },
+          h('span', { style: { flex: 1, minWidth: 0, font: '500 13px/1.3 "Spline Sans Mono", monospace', color: 'var(--amber-300)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, m.value),
+          h(Button, { variant: 'secondary', size: 'sm', iconLeft: h(Icon, { n: 'copy', s: 13 }), onClick: () => { try { navigator.clipboard && navigator.clipboard.writeText(m.value); } catch (e) {} this.flash('Token copied', 'mine'); } }, 'Copy'))),
+      h('div', { key: 'a', style: { display: 'flex', justifyContent: 'flex-end', padding: '14px 22px', borderTop: '1px solid var(--hairline)' } },
+        h(Button, { variant: 'primary', onClick: () => this.commitToken(m, scopes) }, 'Done'))
+    ]);
+  }
+
+  commitToken(m, scopes) {
+    const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    this.patchOrg(o => ({ tokens: [{ name: m.name.trim(), last4: m.last4, scopes, created: today, used: 'never' }, ...o.tokens] }));
+    this.setState({ tokenModal: null });
+    this.flash('Token saved to ' + this.org().name, 'synced');
+  }
+}
+</script>
+</body>
+</html>

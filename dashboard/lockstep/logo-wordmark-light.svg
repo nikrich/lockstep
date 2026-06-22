@@ -1,0 +1,6 @@
+<svg width="250" height="56" viewBox="0 0 250 56" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Lockstep">
+  <rect x="3" y="13" width="30" height="30" rx="8.5" fill="#ffb224"></rect>
+  <circle cx="18" cy="25" r="4.4" fill="#1a1206"></circle>
+  <rect x="15.8" y="26.4" width="4.4" height="9.6" rx="2.2" fill="#1a1206"></rect>
+  <text x="44" y="37" font-family="'Sora',sans-serif" font-size="28" font-weight="700" letter-spacing="-0.8" fill="#11161d">Lockstep</text>
+</svg>
