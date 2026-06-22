@@ -1,0 +1,15 @@
+# Secrets
+.env
+.env.local
+
+# Go build artifacts
+/lockstep
+/lockstep-server
+*.exe
+*.test
+*.out
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/

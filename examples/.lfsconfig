@@ -1,0 +1,8 @@
+# Drop this in the root of your project (commit it).
+# It points git-lfs at the Lockstep coordination server instead of the git host.
+#
+# The "demo" segment is the {repo} path captured by the server. The client will
+# POST to:  http://localhost:8080/demo/objects/batch
+
+[lfs]
+	url = http://localhost:8080/demo
