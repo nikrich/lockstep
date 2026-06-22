@@ -114,8 +114,8 @@ go run ./server
 
 | Phase | What | Status |
 |---|---|---|
-| **0** | Git LFS Batch API → presigned URLs → your bucket | ✅ in this repo |
-| **1** | File locking (LFS Locks API) · be the git remote · auth | 🔜 next |
+| **0** | Git LFS Batch API → presigned URLs → your bucket | ✅ done |
+| **1** | File locking (LFS Locks API ✅) · be the git remote · auth | 🚧 in progress |
 | **2** | Unreal `ISourceControlProvider` plugin | planned |
 | **3** | Tauri desktop GUI · teams · force-unlock · dashboard | planned |
 | **4** | Polish · onboarding · Unity package | planned |

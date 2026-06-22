@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/lockstep-vcs/lockstep/server/lfs"
+	"github.com/lockstep-vcs/lockstep/server/locks"
 	"github.com/lockstep-vcs/lockstep/server/storage"
 )
 
@@ -36,16 +37,24 @@ func main() {
 		log.Fatalf("storage init: %v", err)
 	}
 
-	h := lfs.NewHandler(store)
+	lfsHandler := lfs.NewHandler(store)
+	lockHandler := locks.NewHandler(locks.NewMemStore())
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("ok\n"))
 	})
-	// git-lfs derives this from .lfsconfig's lfs.url: {lfs.url}/objects/batch.
-	// The {repo} segment is captured for future multi-tenant routing; Phase 0
-	// ignores it (one bucket, one project).
-	mux.HandleFunc("POST /{repo}/objects/batch", logging(h.Batch))
+
+	// LFS blob transfer. git-lfs derives this from .lfsconfig's lfs.url:
+	// {lfs.url}/objects/batch. The {repo} segment is captured for future
+	// multi-tenant routing; Phase 0 ignores it (one bucket, one project).
+	mux.HandleFunc("POST /{repo}/objects/batch", logging(lfsHandler.Batch))
+
+	// LFS file locking (Phase 1). In-memory store for now; Postgres later.
+	mux.HandleFunc("POST /{repo}/locks", logging(lockHandler.Create))
+	mux.HandleFunc("GET /{repo}/locks", logging(lockHandler.List))
+	mux.HandleFunc("POST /{repo}/locks/verify", logging(lockHandler.Verify))
+	mux.HandleFunc("POST /{repo}/locks/{id}/unlock", logging(lockHandler.Unlock))
 
 	addr := envOr("LOCKSTEP_ADDR", ":8080")
 	log.Printf("lockstep listening on %s — blobs go direct to bucket %q, 0 bytes proxied",
