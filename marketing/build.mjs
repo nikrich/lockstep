@@ -186,5 +186,8 @@ const out =
   script +
   "\n</body>\n</html>\n";
 
-fs.writeFileSync(new URL("./index.html", here), out);
-console.log("index.html:", out.length, "bytes · leftover dynamic tokens:", leftover.length ? leftover.join(", ") : "none");
+// Write the built page into dist/ — that's the only directory we deploy, so the
+// build sources (source.dc.html, build.mjs) are never served publicly.
+fs.mkdirSync(new URL("./dist/", here), { recursive: true });
+fs.writeFileSync(new URL("./dist/index.html", here), out);
+console.log("dist/index.html:", out.length, "bytes · leftover dynamic tokens:", leftover.length ? leftover.join(", ") : "none");

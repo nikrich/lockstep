@@ -10,6 +10,7 @@ npm-debug.log*
 # Wrangler / Miniflare local state
 .wrangler/
 dist/
+marketing/dist/
 
 # Editor / OS
 .DS_Store
