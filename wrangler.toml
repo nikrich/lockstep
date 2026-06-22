@@ -3,6 +3,12 @@ main = "src/index.ts"
 compatibility_date = "2024-12-05"
 compatibility_flags = ["nodejs_compat"]
 
+# Coordination server (API) on the custom domain. Apex + app.* are reserved for
+# the marketing site and web dashboard. Provisions DNS + cert on deploy.
+routes = [
+  { pattern = "api.lockstepcloud.com", custom_domain = true },
+]
+
 # --- D1: source of truth (users, repos, tokens, LOCKS — transactional) ---
 [[d1_databases]]
 binding = "DB"
@@ -22,7 +28,7 @@ bucket_name = "lockstep-blobs"              # `wrangler r2 bucket create lockste
 
 [vars]
 # Public base URL of the deployed Worker (used to build OAuth redirect URIs).
-BASE_URL = "https://lockstep.nikrich.workers.dev"
+BASE_URL = "https://api.lockstepcloud.com"
 
 # Secrets (set via `wrangler secret put <NAME>`, never commit):
 #   GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET
