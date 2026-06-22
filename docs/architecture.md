@@ -59,18 +59,55 @@ customer controls retention/GC.
 
 ## The moat: locking
 
-Binary `.uasset`/`.umap`/`.fbx` files **cannot be merged**. Two simultaneous
-editors = destroyed work. This is *why* Perforce owns game dev. Lockstep's
-plan:
+### Why pessimistic locking (and why only for binaries)
 
-- **Server-authoritative lock table**: `(repo, branch?, path, owner,
-  acquired_at, heartbeat_at)`.
-- Speak the **existing Git LFS Locks API** so CLI/clients interoperate for
-  free.
-- **Engine enforcement** (the magic): in the UE plugin, locked-by-someone-else
-  assets are **read-only in-editor** with a "🔒 locked by X" badge; save is
-  blocked unless you hold the lock; admins can **force-release**.
+The optimistic-vs-pessimistic debate only exists because most version control
+assumes conflicts can be **merged**. For text/code that holds — git's 3-way
+merge makes optimistic ("edit freely, resolve later") the right call.
+
+Binary Unreal assets break the assumption: a `.uasset` **cannot be merged**, so
+"resolve later" has only two outcomes — keep mine or keep theirs — and one
+person's work is *destroyed*. For binaries the real choice is therefore "prevent
+the conflict up front" vs "discover it after a day's work is lost." Pessimistic
+locking is the only option that respects the artist's time. That's why every
+serious game VCS (Perforce, Plastic, Diversion, Anchorpoint) offers it — it's
+table stakes, not a differentiator.
+
+So Lockstep is **hybrid**, applying locks *only where merge is impossible*:
+
+| File type | Model | Mechanism |
+|---|---|---|
+| source/code (`.cpp/.h/.ini/.json`) | git optimistic merge | normal git |
+| binary assets (`.uasset/.umap/.fbx/.psd`) | **pessimistic lock** | `lockable` in `.gitattributes` → read-only on disk until locked |
+
+### Implementation
+
+- **D1-backed lock table** keyed `UNIQUE(repo_id, path)` so acquisition is a
+  single transactional INSERT — no race window (KV's eventual consistency could
+  not guarantee this). *(Built — Phase 1.)*
+- Speak the **existing Git LFS Locks API** so CLI/clients interoperate for free.
+  *(Built.)*
+- **Engine enforcement** (the magic, Phase 2): in the UE plugin,
+  locked-by-someone-else assets are **read-only in-editor** with a "🔒 locked by
+  X" badge; save is blocked unless you hold the lock; admins **force-release**.
 - **Stale locks**: heartbeat + TTL auto-expiry; offline grace.
+
+### Where we beat the incumbents (both stem from locking's weak spots)
+
+1. **OFPA-native granularity.** UE5 World Partition / One File Per Actor saves
+   each actor to its own file under `__ExternalActors__`, so two artists editing
+   different parts of one level touch *different* files → *different* locks. This
+   dissolves the classic "whole-level lock contention" pain. A locking system
+   that *understands* the external-actor layout — surfacing locks at actor
+   granularity, not just raw paths — is materially better than Perforce's
+   generic file locking for modern UE5 projects. *(Planned.)*
+2. **Soft / advisory locks.** An optional "warn, don't block" mode for
+   high-trust teams who want git's freedom with a collision early-warning,
+   instead of hard exclusive checkout. Addresses locking's offline/bottleneck
+   weak spots without abandoning the safety net. *(Planned.)*
+
+Locking's genuine costs we must manage: it needs connectivity to acquire (offline
+grace + clear "you don't hold this" UI), and lock hygiene (TTL + force-unlock).
 
 ## Phases
 
@@ -78,8 +115,8 @@ plan:
 |---|---|---|
 | **0 — Spike** *(this repo)* | LFS Batch API → presigned URLs → R2 bucket | The cost story, end to end |
 | 1 — Locks + git remote | Lock table + LFS Locks API; be the git smart-HTTP remote; auth | The moat works; self-contained |
-| 2 — UE plugin | `ISourceControlProvider`: checkout/submit/lock/locked-by badge | A real UE team can dogfood |
-| 3 — GUI + teams | Tauri desktop app, projects, force-unlock, dashboard | Sellable to non-CLI artists |
+| 2 — UE plugin | `ISourceControlProvider`: checkout/submit/lock/locked-by badge; **OFPA-aware** lock granularity | A real UE team can dogfood |
+| 3 — GUI + teams | Tauri desktop app, projects, force-unlock, dashboard; **soft-lock mode** | Sellable to non-CLI artists |
 | 4 — Polish / Unity | Onboarding, web dashboard, Unity package | Market expansion |
 
 ## Phase 0 deliberately omits
@@ -91,7 +128,7 @@ plan:
 ## Competitive landscape
 
 - **Anchorpoint** — git-LFS + BYO S3 + GUI; closest comparable. Wedge vs them:
-  engine-native locking + UE plugin depth.
+  engine-native locking + UE plugin depth + OFPA-aware lock granularity.
 - **Diversion** — custom cloud VCS (not git). Heavier to build, less ecosystem.
 - **Unity Version Control / Plastic**, **Perforce** — incumbents; expensive
   and/or not BYO-storage.

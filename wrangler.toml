@@ -7,13 +7,13 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "lockstep"
-database_id = "REPLACE_WITH_D1_ID"          # `wrangler d1 create lockstep`
+database_id = "33479072-8ae3-4edf-9cbe-1771e80ef61f"
 migrations_dir = "migrations"
 
 # --- KV: hot-path session/token cache (eventually consistent — never locks) ---
 [[kv_namespaces]]
 binding = "SESSIONS"
-id = "REPLACE_WITH_KV_ID"                    # `wrangler kv namespace create SESSIONS`
+id = "4c6cc828c8984acb8aa2677f80189eef"
 
 # --- R2: blob storage. Customers bring their OWN bucket; this is the default. ---
 [[r2_buckets]]
@@ -22,7 +22,7 @@ bucket_name = "lockstep-blobs"              # `wrangler r2 bucket create lockste
 
 [vars]
 # Public base URL of the deployed Worker (used to build OAuth redirect URIs).
-BASE_URL = "https://lockstep.example.workers.dev"
+BASE_URL = "https://lockstep.nikrich.workers.dev"
 
 # Secrets (set via `wrangler secret put <NAME>`, never commit):
 #   GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET
