@@ -14,7 +14,11 @@ export default defineWorkersConfig(async () => {
             d1Databases: ["DB"],
             kvNamespaces: ["SESSIONS"],
             r2Buckets: ["BLOBS"],
-            bindings: { TEST_MIGRATIONS: migrations },
+            bindings: {
+              TEST_MIGRATIONS: migrations,
+              // Deterministic 32-byte base64 key for envelope-encryption tests.
+              LOCKSTEP_MASTER_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+            },
           },
         },
       },

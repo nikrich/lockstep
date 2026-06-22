@@ -15,6 +15,8 @@ export interface Env {
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
   SESSION_SECRET: string;
+  // 32-byte base64 key for envelope-encrypting org storage secrets.
+  LOCKSTEP_MASTER_KEY: string;
 
   // Bring-your-own R2 (S3 API) for presigned blob transfer.
   R2_ACCOUNT_ID?: string;

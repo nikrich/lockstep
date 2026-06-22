@@ -57,6 +57,49 @@ customer controls retention/GC.
 | Consistency split | **D1** = source of truth (users/repos/tokens/**locks**); **KV** = session/token cache | Locks need transactions (`UNIQUE(repo,path)`); KV's eventual consistency would allow double-locking |
 | Storage | R2 via presigned URLs (S3 API, aws4fetch); customers BYO bucket | Zero egress; one S3 code path also covers B2/Wasabi/MinIO/S3 |
 
+## Multi-tenant: control plane vs data plane
+
+Lockstep is two surfaces over one Worker:
+
+**Control plane — the enterprise web dashboard (humans, OAuth).** An org admin:
+- creates an **org**, connects **storage once at the org level** (R2/S3 creds),
+- creates repos, invites **members** (each = a billable **seat**), sets roles.
+
+**Data plane — the API apps hit (machines, PAT/session tokens).** The desktop
+app, git, git-lfs, and the UE plugin authenticate with a token and only ever
+receive **short-lived presigned URLs** — never bucket credentials.
+
+```
+ Org admin ──OAuth──► Dashboard ──connect storage──► org_storage (D1)
+                                                       secret AES-GCM encrypted
+                                                       (master key = Worker secret)
+ Seat user ──token──► Data-plane API ──resolve repo→org→decrypt──► presign ──► R2
+                          (desktop app / git / UE plugin)          0 bytes via Worker
+```
+
+### The credential trust boundary (the critical invariant)
+
+The org's bucket **secret never leaves the server.** It is encrypted at rest in
+D1 (`org_storage.secret_cipher`, AES-256-GCM) and only the Worker — holding the
+`LOCKSTEP_MASTER_KEY` — decrypts it to presign. A seat-holder can pull/push
+assets but can never extract the bucket keys. That is what makes BYO-storage
+safe to run as multi-tenant SaaS. Keys are further isolated **per repo** via a
+key prefix (`<orgPrefix>/<repoSlug>/…`).
+
+### Seats & desktop auth
+
+- **Seat** = a row in `org_members` with `seat_active = 1`; the billing unit.
+  Roles: `owner` / `admin` / `member`. Storage config is owner/admin-only.
+- **Desktop app login**: OAuth via the browser (device/redirect flow) mints a
+  session; for git operations the app uses a PAT stored in the OS credential
+  helper. Same token model as git/CLI/CI — one mechanism for all machines.
+
+*Status:* org CRUD, seat membership, encrypted storage-connect (with live
+test-connection), and per-org/per-repo presign are **built and verified live**.
+Still to build: invites/seat-billing flows, a create-repo-under-org endpoint
+(repos currently auto-provision with no org for dev), and membership-scoped
+authorization on every data-plane call.
+
 ## The moat: locking
 
 ### Why pessimistic locking (and why only for binaries)

@@ -9,6 +9,7 @@ export interface Repo {
   id: string;
   slug: string;
   owner_id: string;
+  org_id: string | null;
 }
 
 export async function resolveRepo(
@@ -17,7 +18,9 @@ export async function resolveRepo(
   const slug = c.req.param("repo");
   if (!slug) return null;
 
-  const found = await c.env.DB.prepare("SELECT id, slug, owner_id FROM repos WHERE slug = ?")
+  const found = await c.env.DB.prepare(
+    "SELECT id, slug, owner_id, org_id FROM repos WHERE slug = ?",
+  )
     .bind(slug)
     .first<Repo>();
   if (found) return found;
@@ -25,7 +28,7 @@ export async function resolveRepo(
   // Auto-provision for the authenticated caller (dev-friendly; tighten later).
   const id = c.get("identity");
   if (!id) return null;
-  const repo: Repo = { id: uuid(), slug, owner_id: id.userId };
+  const repo: Repo = { id: uuid(), slug, owner_id: id.userId, org_id: null };
   await c.env.DB.prepare(
     "INSERT INTO repos (id, slug, owner_id, created_at) VALUES (?, ?, ?, ?)",
   )

@@ -10,6 +10,7 @@ import { Hono } from "hono";
 import type { Env, Vars } from "./lib/types";
 import authRoutes from "./routes/auth";
 import tokenRoutes from "./routes/tokens";
+import orgRoutes from "./routes/orgs";
 import lfsRoutes from "./routes/lfs";
 import lockRoutes from "./routes/locks";
 
@@ -17,9 +18,10 @@ const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 
 app.get("/healthz", (c) => c.text("ok\n"));
 
-// Dashboard auth + token management.
+// Dashboard auth + token management + org/seat/storage control plane.
 app.route("/auth", authRoutes);
 app.route("/tokens", tokenRoutes);
+app.route("/orgs", orgRoutes);
 
 // Per-repo git-lfs surface. git-lfs derives these from .lfsconfig's lfs.url:
 //   {lfs.url}/objects/batch  and  {lfs.url}/locks...
