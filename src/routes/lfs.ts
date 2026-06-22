@@ -7,7 +7,7 @@
 import { Hono } from "hono";
 import type { Env, Vars } from "../lib/types";
 import { requireAuth } from "../lib/auth";
-import { resolveRepo } from "../lib/repo";
+import { authorizeRepo } from "../lib/access";
 import { resolveStorage, presign } from "../lib/storage";
 
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
@@ -22,8 +22,9 @@ interface ObjectSpec {
 }
 
 app.post("/objects/batch", async (c) => {
-  const repo = await resolveRepo(c);
-  if (!repo) return c.json({ message: "repo not found" }, 404);
+  const az = await authorizeRepo(c);
+  if (!az.ok) return c.json({ message: az.message }, az.status);
+  const repo = az.value.repo;
 
   const storage = await resolveStorage(c.env, repo.org_id, repo.slug);
   if (!storage) {

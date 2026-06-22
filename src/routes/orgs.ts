@@ -8,6 +8,7 @@ import type { Env, Vars } from "../lib/types";
 import { requireAuth } from "../lib/auth";
 import { uuid, aesEncrypt } from "../lib/crypto";
 import { testConnection } from "../lib/storage";
+import { orgRole } from "../lib/access";
 
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 
@@ -16,16 +17,6 @@ app.use("*", requireAuth());
 const now = () => Math.floor(Date.now() / 1000);
 const slugify = (s: string) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
-
-// Role check: does the caller hold one of `roles` in this org?
-async function roleOf(env: Env, orgId: string, userId: string): Promise<string | null> {
-  const row = await env.DB.prepare(
-    "SELECT role FROM org_members WHERE org_id = ? AND user_id = ?",
-  )
-    .bind(orgId, userId)
-    .first<{ role: string }>();
-  return row?.role ?? null;
-}
 
 // --- Orgs ---
 
@@ -82,7 +73,7 @@ app.put("/:orgId/storage", async (c) => {
   const { userId } = c.get("identity");
   const orgId = c.req.param("orgId");
 
-  const role = await roleOf(c.env, orgId, userId);
+  const role = await orgRole(c.env, orgId, userId);
   if (role !== "owner" && role !== "admin") {
     return c.json({ message: "must be an org owner or admin" }, 403);
   }
@@ -126,7 +117,7 @@ app.put("/:orgId/storage", async (c) => {
 app.get("/:orgId/storage", async (c) => {
   const { userId } = c.get("identity");
   const orgId = c.req.param("orgId");
-  if (!(await roleOf(c.env, orgId, userId))) return c.json({ message: "not a member" }, 403);
+  if (!(await orgRole(c.env, orgId, userId))) return c.json({ message: "not a member" }, 403);
 
   const row = await c.env.DB.prepare(
     "SELECT provider, endpoint, region, bucket, prefix, access_key_id FROM org_storage WHERE org_id = ?",
@@ -152,6 +143,48 @@ app.get("/:orgId/storage", async (c) => {
       secretAccessKey: "••••••••",
     },
   });
+});
+
+// --- Repos under an org (members only) ---
+
+// Create a repo. Any active member may create; it belongs to the org, so all
+// members get access via authorizeRepo on the data plane.
+app.post("/:orgId/repos", async (c) => {
+  const { userId } = c.get("identity");
+  const orgId = c.req.param("orgId");
+  if (!(await orgRole(c.env, orgId, userId))) return c.json({ message: "not a member" }, 403);
+
+  const body = await c.req
+    .json<{ name?: string; slug?: string }>()
+    .catch(() => ({}) as { name?: string; slug?: string });
+  const slug = slugify(body.slug || body.name || "");
+  if (!slug) return c.json({ message: "name or slug is required" }, 400);
+
+  const repo = { id: uuid(), slug, owner_id: userId, org_id: orgId, created_at: now() };
+  try {
+    await c.env.DB.prepare(
+      "INSERT INTO repos (id, slug, owner_id, org_id, created_at) VALUES (?, ?, ?, ?, ?)",
+    )
+      .bind(repo.id, repo.slug, repo.owner_id, repo.org_id, repo.created_at)
+      .run();
+  } catch {
+    return c.json({ message: "repo slug already taken" }, 409);
+  }
+  return c.json({ repo }, 201);
+});
+
+// List the org's repos.
+app.get("/:orgId/repos", async (c) => {
+  const { userId } = c.get("identity");
+  const orgId = c.req.param("orgId");
+  if (!(await orgRole(c.env, orgId, userId))) return c.json({ message: "not a member" }, 403);
+
+  const { results } = await c.env.DB.prepare(
+    "SELECT id, slug, created_at FROM repos WHERE org_id = ? ORDER BY created_at DESC",
+  )
+    .bind(orgId)
+    .all();
+  return c.json({ repos: results });
 });
 
 function maskedStorage(b: StorageBody) {

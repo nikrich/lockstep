@@ -3,13 +3,15 @@
 //
 // The moat: binary assets can't be merged, so a path may have at most one
 // active lock. The UNIQUE(repo_id, path) constraint makes acquisition a single
-// INSERT that either wins or fails — no race window (which a KV-backed store
-// could not guarantee).
+// INSERT that either wins or fails — no race window.
+//
+// Every handler authorizes the caller against the repo first (authorizeRepo):
+// org repos require an active seat; personal repos require ownership.
 import { Hono } from "hono";
 import type { Env, Lock, Vars } from "../lib/types";
 import { requireAuth } from "../lib/auth";
 import { uuid } from "../lib/crypto";
-import { resolveRepo } from "../lib/repo";
+import { authorizeRepo } from "../lib/access";
 
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 
@@ -24,8 +26,9 @@ const toJSON = (l: Lock) => ({
 
 // POST /:repo/locks — acquire.
 app.post("/", async (c) => {
-  const repo = await resolveRepo(c);
-  if (!repo) return c.json({ message: "repo not found" }, 404);
+  const az = await authorizeRepo(c);
+  if (!az.ok) return c.json({ message: az.message }, az.status);
+  const repo = az.value.repo;
   const id = c.get("identity");
 
   const body = await c.req
@@ -59,7 +62,6 @@ app.post("/", async (c) => {
       .bind(lock.id, lock.repo_id, lock.path, lock.ref, lock.owner_id, lock.owner_name, lock.locked_at)
       .run();
   } catch {
-    // Lost the race on the UNIQUE constraint: report the winner.
     const winner = await c.env.DB.prepare(
       "SELECT * FROM locks WHERE repo_id = ? AND path = ?",
     )
@@ -72,8 +74,9 @@ app.post("/", async (c) => {
 
 // GET /:repo/locks — list (optional ?path= & ?id= filters).
 app.get("/", async (c) => {
-  const repo = await resolveRepo(c);
-  if (!repo) return c.json({ message: "repo not found" }, 404);
+  const az = await authorizeRepo(c);
+  if (!az.ok) return c.json({ message: az.message }, az.status);
+  const repo = az.value.repo;
 
   const path = c.req.query("path");
   const id = c.req.query("id");
@@ -89,8 +92,9 @@ app.get("/", async (c) => {
 
 // POST /:repo/locks/verify — split into the caller's locks vs everyone else's.
 app.post("/verify", async (c) => {
-  const repo = await resolveRepo(c);
-  if (!repo) return c.json({ message: "repo not found" }, 404);
+  const az = await authorizeRepo(c);
+  if (!az.ok) return c.json({ message: az.message }, az.status);
+  const repo = az.value.repo;
   const me = c.get("identity").userId;
 
   const { results } = await c.env.DB.prepare("SELECT * FROM locks WHERE repo_id = ?")
@@ -103,10 +107,13 @@ app.post("/verify", async (c) => {
   });
 });
 
-// POST /:repo/locks/:id/unlock — owner-only unless force (admin override).
+// POST /:repo/locks/:id/unlock — own lock anytime; someone else's only with
+// force AND an admin/owner role (a plain member cannot steal a lock).
 app.post("/:id/unlock", async (c) => {
-  const repo = await resolveRepo(c);
-  if (!repo) return c.json({ message: "repo not found" }, 404);
+  const az = await authorizeRepo(c);
+  if (!az.ok) return c.json({ message: az.message }, az.status);
+  const repo = az.value.repo;
+  const role = az.value.role;
   const me = c.get("identity").userId;
   const lockId = c.req.param("id");
 
@@ -120,8 +127,13 @@ app.post("/:id/unlock", async (c) => {
     .first<Lock>();
   if (!lock) return c.json({ message: "lock not found" }, 404);
 
-  if (lock.owner_id !== me && !body.force) {
-    return c.json({ message: "lock owned by another user; retry with force" }, 403);
+  if (lock.owner_id !== me) {
+    if (!body.force) {
+      return c.json({ message: "lock owned by another user; retry with force" }, 403);
+    }
+    if (role !== "owner" && role !== "admin") {
+      return c.json({ message: "force-unlocking another user's lock requires an admin" }, 403);
+    }
   }
   await c.env.DB.prepare("DELETE FROM locks WHERE id = ?").bind(lockId).run();
   return c.json({ lock: toJSON(lock) });
