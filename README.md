@@ -9,8 +9,8 @@ Lock files like Perforce. Pay pennies, not hundreds.
 
 [![License: BSL 1.1](https://img.shields.io/badge/license-BSL%201.1-blue.svg)](LICENSE)
 [![Fair-Source](https://img.shields.io/badge/fair--source-free%20under%20%241M-brightgreen.svg)](LICENSE-GRANT.md)
-[![Status: Phase 0](https://img.shields.io/badge/status-alpha%20(Phase%200)-orange.svg)](#roadmap)
-[![Built with Go](https://img.shields.io/badge/server-Go%201.22%2B-00ADD8.svg?logo=go&logoColor=white)](https://go.dev)
+[![Status: Phase 1](https://img.shields.io/badge/status-alpha%20(Phase%201)-orange.svg)](#roadmap)
+[![Cloudflare Workers](https://img.shields.io/badge/runtime-Cloudflare%20Workers-F38020.svg?logo=cloudflare&logoColor=white)](https://workers.cloudflare.com)
 [![Engines: Unreal · Unity](https://img.shields.io/badge/engines-Unreal%20%C2%B7%20Unity-5c5c5c.svg)](#)
 
 </div>
@@ -53,69 +53,63 @@ own the bucket and control retention. Full breakdown in
 ## How it works
 
 ```
-┌─────────────┐   ┌─────────────┐   ┌──────────────┐
-│ Unreal      │   │ Unity       │   │ Desktop GUI  │   clients
-│ plugin      │   │ package     │   │ (Tauri)      │
-└──────┬──────┘   └──────┬──────┘   └──────┬───────┘
-       └─────────────────┴─────────────────┘
-                         │  git · LFS batch · file locks
-                ┌────────▼─────────┐
-                │ Coordination srv │   small + cheap: only pointers + locks
-                │  (this repo, Go) │
-                └────────┬─────────┘
-                         │  presigned PUT/GET  (0 blob bytes through server)
-                ┌────────▼─────────┐
-                │  YOUR bucket     │   R2 · B2 · Wasabi · MinIO · S3
-                └──────────────────┘
+   clients (git · git-lfs · UE plugin · Tauri GUI)
+        │  PAT auth (dashboard login via OAuth)
+        ▼
+┌─────────────────────────────────────────────┐
+│ Coordination Worker  (Cloudflare edge, TS)   │
+│  OAuth · PATs · LFS batch · lock API         │
+└───┬───────────────┬───────────────┬──────────┘
+    │ D1            │ KV            │ presign
+    │ consistent    │ cache         ▼
+    │ users/repos/  │ sessions   ┌──────────────┐
+    │ tokens/LOCKS  │ + tokens   │ R2 (your     │
+    └───────────────┘            │ bucket) blobs│  0 bytes via Worker
+                                 └──────────────┘
 ```
 
 ## Features
 
-- 🪣 **Bring your own storage** — one S3-compatible code path covers
-  Cloudflare R2, Backblaze B2, Wasabi, MinIO, and AWS S3.
+- 🪣 **Bring your own storage** — presigned URLs to your own R2 bucket (one
+  S3-compatible path also covers B2 / Wasabi / MinIO / S3).
 - 🚫 **Zero egress, zero blob proxying** — bytes go client ↔ bucket directly.
-- 🔒 **File locking** *(Phase 1)* — exclusive checkout for unmergeable
-  `.uasset` / `.umap` / `.fbx`, enforced inside the editor.
-- 🎮 **Native Unreal plugin** *(Phase 2)* — checkout, submit, and lock without
-  leaving the editor.
+- 🔒 **File locking** — exclusive checkout for unmergeable `.uasset` / `.umap`
+  / `.fbx`, transactionally correct (D1 `UNIQUE(repo,path)`, no race window).
+- 🔑 **Dev-friendly auth** — OAuth (GitHub/Google) for the dashboard, Personal
+  Access Tokens for git / CI / the engine plugin.
+- ⚡ **Runs on Cloudflare** — Workers + D1 + KV + R2; near-zero hosting cost.
+- 🎮 **Native Unreal plugin** *(Phase 2)* — checkout, submit, lock in-editor.
 - 🤝 **Fair-source** — free for indies and studios under **$1M/year**.
 
-## Quickstart (Phase 0 spike)
+## Quickstart (local dev)
 
-> Phase 0 proves the cost story end-to-end: push a binary, watch it land in
-> your bucket via a presigned URL, clone it back — server proxies **zero**
-> blob bytes.
-
-**Prerequisites:** [Go 1.22+](https://go.dev/dl/), `git`,
-[`git-lfs`](https://git-lfs.com/), and a bucket on any S3-compatible provider.
+**Prerequisites:** [Node 20+](https://nodejs.org), and a Cloudflare account for
+deploy (local dev runs fully offline via Miniflare).
 
 ```bash
 git clone https://github.com/nikrich/lockstep.git
 cd lockstep
-cp .env.example .env          # edit with your bucket + keys
-go mod tidy
-go run ./server               # -> listening on :8080
+npm install
+npm run migrate:local      # apply D1 schema to the local dev database
+npm run dev                # wrangler dev -> http://localhost:8787
+npm test                   # run the Worker integration tests (vitest)
 ```
 
-Full end-to-end test (create a fake `.uasset`, push, clone, verify checksum) is
-in [`docs/`](docs/architecture.md) and the run notes below the fold.
+Deploy: create the resources (`wrangler d1 create lockstep`,
+`wrangler kv namespace create SESSIONS`, `wrangler r2 bucket create
+lockstep-blobs`), paste the ids into `wrangler.toml`, set secrets
+(`wrangler secret put ...` — see [`docs/auth.md`](docs/auth.md)), then
+`npm run deploy`.
 
-<details>
-<summary>Load <code>.env</code> on PowerShell</summary>
-
-```powershell
-Get-Content .env | Where-Object { $_ -and $_ -notmatch '^\s*#' } |
-  ForEach-Object { $k,$v = $_ -split '=',2; Set-Item "Env:$k" $v }
-go run ./server
-```
-</details>
+See [`docs/auth.md`](docs/auth.md) for OAuth + token setup and
+[`docs/architecture.md`](docs/architecture.md) for the full design.
 
 ## Roadmap
 
 | Phase | What | Status |
 |---|---|---|
 | **0** | Git LFS Batch API → presigned URLs → your bucket | ✅ done |
-| **1** | File locking (LFS Locks API ✅) · be the git remote · auth | 🚧 in progress |
+| **1** | File locking ✅ · OAuth + PATs ✅ · be the git remote | 🚧 in progress |
 | **2** | Unreal `ISourceControlProvider` plugin | planned |
 | **3** | Tauri desktop GUI · teams · force-unlock · dashboard | planned |
 | **4** | Polish · onboarding · Unity package | planned |
@@ -123,11 +117,14 @@ go run ./server
 ## Repository layout
 
 ```
-server/            Go coordination server
-  storage/         S3-compatible adapter (R2 / B2 / Wasabi / MinIO / S3)
-  lfs/             Git LFS Batch API handler
-cli/               (Phase 1) thin git + lfs + lock wrapper
-docs/              architecture & design
+src/
+  index.ts         Worker entrypoint (Hono routes)
+  routes/          auth (OAuth), tokens (PATs), lfs (batch), locks
+  lib/             types, crypto, auth middleware, oauth, repo resolution
+migrations/        D1 schema (users, repos, tokens, locks)
+test/              Worker integration tests (vitest pool)
+cli/               (later) thin git + lfs + lock wrapper
+docs/              architecture, auth & design
 examples/          .gitattributes / .lfsconfig for your UE project
 ```
 

@@ -1,13 +1,15 @@
-# Secrets
+# Secrets / local config
+.dev.vars
 .env
 .env.local
 
-# Go build artifacts
-/lockstep
-/lockstep-server
-*.exe
-*.test
-*.out
+# Node
+node_modules/
+npm-debug.log*
+
+# Wrangler / Miniflare local state
+.wrangler/
+dist/
 
 # Editor / OS
 .DS_Store

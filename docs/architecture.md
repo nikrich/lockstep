@@ -25,19 +25,23 @@ customer controls retention/GC.
 │ (C++ ISCP)  │   │ (C#) [later]│   │ (Tauri)[later│
 └──────┬──────┘   └──────┬──────┘   └──────┬───────┘
        └─────────────────┴─────────────────┘
-                         │  git smart-HTTP + LFS batch + lock API
-                ┌────────▼─────────┐
-                │ Coordination srv │  YOU host (SaaS). Go + Postgres.
-                │  • auth / teams  │  Tiny: only pointers + locks + refs.
-                │  • git remote    │
-                │  • LFS batch  ◄──┼── implemented in Phase 0
-                │  • LOCK table    │
-                └────────┬─────────┘
-                         │  presigned PUT/GET URLs (0 blob bytes through server)
-                ┌────────▼─────────┐
-                │ Customer bucket  │  BYO: R2 / B2 / Wasabi / MinIO / S3
-                │  (LFS blob CAS)  │
-                └──────────────────┘
+            git smart-HTTP + LFS batch + lock API
+            (PAT auth; dashboard uses OAuth)
+                ┌────────▼──────────────────────┐
+                │ Coordination Worker (CF edge)  │
+                │  • OAuth (GitHub/Google)       │
+                │  • PAT auth                    │
+                │  • LFS batch  ── presign ──┐   │
+                │  • lock API ──┐            │   │
+                └───────────────┼────────────┼───┘
+                   D1 (consistent)│      KV (cache)
+                   users/repos/   │      sessions +
+                   tokens/LOCKS   │      token cache
+                                  │            │
+                         ┌────────▼────────────▼─┐
+                         │ R2 bucket (BYO)        │  presigned PUT/GET
+                         │ LFS blob CAS           │  0 bytes through Worker
+                         └────────────────────────┘
 ```
 
 ## Locked-in decisions (2026-06-22)
@@ -48,8 +52,10 @@ customer controls retention/GC.
 | Hosting | **You-hosted SaaS coordination** | Clean onboarding + per-seat billing; customer brings only a bucket |
 | First client | **UE source-control provider plugin** (after CLI spike) | Strongest skillset; dogfood on a real 100 GB UE5 RPG |
 | License | **BSL 1.1**, free under $1M revenue, → Apache 2.0 after 4 yr | Sustainable, indie-friendly; marketed as **fair-source**, never "open source" |
-| Server stack | **Go** (axum/Rust later for shared client core) | Fastest path to a working LFS server; single static binary to deploy |
-| Storage | One **S3-compatible** code path | Covers R2 / B2 / Wasabi / MinIO / S3 |
+| Runtime | **All-in Cloudflare**: Workers + D1 + KV + R2 (TypeScript/Hono) | Near-zero hosting, edge-native, first-class D1/KV/R2 bindings |
+| Auth | **OAuth (GitHub/Google)** for dashboard · **PATs** for git/CLI/UE/CI | GitHub/GitLab model; no per-seat Access cost; PAT = the git-native answer |
+| Consistency split | **D1** = source of truth (users/repos/tokens/**locks**); **KV** = session/token cache | Locks need transactions (`UNIQUE(repo,path)`); KV's eventual consistency would allow double-locking |
+| Storage | R2 via presigned URLs (S3 API, aws4fetch); customers BYO bucket | Zero egress; one S3 code path also covers B2/Wasabi/MinIO/S3 |
 
 ## The moat: locking
 

@@ -1,0 +1,18 @@
+# Copy to `.dev.vars` for local `wrangler dev`. These map to Env secrets.
+# In production, set them with `wrangler secret put <NAME>` instead.
+
+# OAuth apps (callback: http://localhost:8787/auth/<provider>/callback in dev)
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+
+# Random 32+ byte string used to HMAC-sign session cookies
+SESSION_SECRET=
+
+# Bring-your-own R2 bucket via the S3 API (presigned blob transfer).
+# Leave blank in dev to use the bound R2 binding fallback.
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET=
