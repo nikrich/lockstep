@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<script src="api.js?v=a0c1c441"></script>
+<script src="api.js?v=cbdfa9ab"></script>
 <script src="./support.js"></script>
 </head>
 <body>
@@ -891,7 +891,7 @@ class Component extends DCLogic {
     return this.pageWrap([
       h('button', { onClick: () => this.setState({ repoOpen: null }), onMouseEnter: e => e.currentTarget.style.color = 'var(--text-body)', onMouseLeave: e => e.currentTarget.style.color = 'var(--text-muted)', style: { display: 'inline-flex', alignItems: 'center', gap: 6, border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', font: '500 12.5px/1 Sora, sans-serif', marginBottom: 16, padding: 0 } }, h(Icon, { n: 'arrow-left', s: 15 }), 'Repositories'),
       this.pageHead(r.name, 'git \u00b7 ' + r.branch + ' \u00b7 in ' + org.name,
-        h(Button, { variant: 'secondary', size: 'sm', iconLeft: h(Icon, { n: 'external-link', s: 14 }), onClick: () => this.flash('Opening bucket browser \u2014 demo', 'mine') }, 'Open bucket')),
+        h(Button, { variant: 'secondary', size: 'sm', iconLeft: h(Icon, { n: 'external-link', s: 14 }), onClick: () => { const s = org.storage || {}; const host = (s.endpoint || '').split('://')[1] || ''; const acct = host.split('.')[0]; if (s.provider === 'r2' && acct) { window.open('https://dash.cloudflare.com/' + acct + '/r2/default/buckets/' + s.bucket, '_blank'); } else if (s.endpoint) { window.open(s.endpoint, '_blank'); } else { this.flash('Connect storage first', 'locked'); } } }, 'Open bucket')),
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 14 } },
         h(StatBlock, { label: 'Storage used', value: r.sizeGB, unit: 'GB', hint: r.blobs.toLocaleString() + ' blobs' }),
         h(StatBlock, { label: 'Active locks', value: r.locks, accent: r.locks > 0, hint: r.lockList.filter(l => l.stale).length + ' stale' }),

@@ -75,7 +75,15 @@
     if (!s) return Object.assign({ connected: false, provider: "r2", endpoint: "", region: "auto", bucket: "", accessKeyId: "", secret: "", prefix: "" }, stats);
     return Object.assign({ connected: true, provider: s.provider || "r2", endpoint: s.endpoint || "", region: s.region || "auto", bucket: s.bucket || "", accessKeyId: s.accessKeyId || "", secret: "••••••••", prefix: s.prefix || "" }, stats);
   }
-  function mapOrg(o, repos, tokens, storage, usageData, user) {
+  function mapActivity(activityData, user) {
+    var ICON = { org: "building-2", storage: "database", repo: "box", token: "key-round", lock: "lock", push: "git-commit-horizontal" };
+    var TINT = { org: "var(--status-synced)", storage: "var(--amber-400)", repo: "var(--status-mine)", token: "var(--status-pending)", lock: "var(--status-locked)", push: "var(--status-synced)" };
+    var who = (user && user.name) || "You";
+    return ((activityData && activityData.activity) || []).map(function (e) {
+      return { who: who, what: e.what, when: timeAgo(e.when), icon: ICON[e.kind] || "activity", tint: TINT[e.kind] || "var(--text-muted)" };
+    });
+  }
+  function mapOrg(o, repos, tokens, storage, usageData, activityData, user) {
     var statsByRepo = {};
     ((usageData && usageData.byRepo) || []).forEach(function (br) { statsByRepo[br.repo] = br; });
     return {
@@ -89,7 +97,7 @@
       repos: repos.map(function (r) { return mapRepo(r, statsByRepo[r.slug]); }),
       tokens: tokens.map(mapToken),
       invoices: [],
-      activity: [],
+      activity: mapActivity(activityData, user),
       ttl: 15, lockPolicy: "hard",
     };
   }
@@ -113,8 +121,9 @@
                 req("GET", "/orgs/" + o.id + "/repos").catch(function () { return { repos: [] }; }),
                 req("GET", "/orgs/" + o.id + "/storage").catch(function () { return { storage: null }; }),
                 req("GET", "/orgs/" + o.id + "/storage/usage").catch(function () { return null; }),
+                req("GET", "/orgs/" + o.id + "/activity").catch(function () { return null; }),
               ]).then(function (rs) {
-                return mapOrg(o, (rs[0] && rs[0].repos) || [], tokens, rs[1] && rs[1].storage, rs[2], user);
+                return mapOrg(o, (rs[0] && rs[0].repos) || [], tokens, rs[1] && rs[1].storage, rs[2], rs[3], user);
               });
             }));
           }).then(function (orgsArr) {

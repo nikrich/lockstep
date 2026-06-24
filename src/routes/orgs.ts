@@ -197,6 +197,45 @@ app.get("/:orgId/repos", async (c) => {
   return c.json({ repos: results });
 });
 
+// Recent activity, derived from existing records (no events table yet): org
+// creation, storage connect, repo creation, token generation.
+app.get("/:orgId/activity", async (c) => {
+  const { userId } = c.get("identity");
+  const orgId = c.req.param("orgId");
+  if (!(await orgRole(c.env, orgId, userId))) return c.json({ message: "not a member" }, 403);
+
+  const events: Array<{ kind: string; what: string; when: number }> = [];
+
+  const org = await c.env.DB.prepare("SELECT name, created_at FROM orgs WHERE id = ?")
+    .bind(orgId)
+    .first<{ name: string; created_at: number }>();
+  if (org) events.push({ kind: "org", what: `created ${org.name}`, when: org.created_at });
+
+  const st = await c.env.DB.prepare(
+    "SELECT bucket, created_at, updated_at FROM org_storage WHERE org_id = ?",
+  )
+    .bind(orgId)
+    .first<{ bucket: string; created_at: number; updated_at: number }>();
+  if (st) events.push({ kind: "storage", what: `connected storage · ${st.bucket}`, when: st.updated_at || st.created_at });
+
+  const repos = await c.env.DB.prepare(
+    "SELECT slug, created_at FROM repos WHERE org_id = ? ORDER BY created_at DESC LIMIT 20",
+  )
+    .bind(orgId)
+    .all<{ slug: string; created_at: number }>();
+  for (const r of repos.results) events.push({ kind: "repo", what: `created repo ${r.slug}`, when: r.created_at });
+
+  const tokens = await c.env.DB.prepare(
+    "SELECT name, created_at FROM tokens WHERE user_id = ? ORDER BY created_at DESC LIMIT 10",
+  )
+    .bind(userId)
+    .all<{ name: string; created_at: number }>();
+  for (const t of tokens.results) events.push({ kind: "token", what: `generated token · ${t.name}`, when: t.created_at });
+
+  events.sort((a, b) => b.when - a.when);
+  return c.json({ activity: events.slice(0, 25) });
+});
+
 function maskedStorage(b: StorageBody) {
   return {
     provider: b.provider,
