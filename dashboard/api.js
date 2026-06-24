@@ -84,7 +84,7 @@
     // Determine auth via /auth/me, then replace the prototype's mock orgs with
     // real data. No session (prod) -> show the sign-in screen.
     bootstrap: function (comp) {
-      req("GET", "/auth/me").then(function (meRes) {
+      return req("GET", "/auth/me").then(function (meRes) {
         var user = (meRes && meRes.user) || null;
         return req("GET", "/orgs").then(function (res) {
           var list = (res && res.orgs) || [];
@@ -123,6 +123,7 @@
         accessKeyId: d.accessKeyId, secretAccessKey: d.secret, prefix: d.prefix || null,
       });
     },
+    createOrg: function (name) { return req("POST", "/orgs", { name: name }); },
     createRepo: function (orgId, name) { return req("POST", "/orgs/" + orgId + "/repos", { name: name }); },
     createToken: function (name, scopes) { return req("POST", "/tokens", { name: name, scopes: (scopes || []).join(",") }); },
   };
