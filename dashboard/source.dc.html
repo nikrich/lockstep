@@ -156,7 +156,7 @@ class Component extends DCLogic {
   state = {
     ready: false,
     theme: 'dark',
-    route: 'signin',
+    route: 'loading',
     orgId: 'aurora',
     orgs: seedOrgs(),
     nav: 'home',
@@ -248,7 +248,7 @@ class Component extends DCLogic {
   }
 
   renderVals() {
-    if (!this.state.ready) return { app: this.splash() };
+    if (!this.state.ready || this.state.route === 'loading') return { app: this.splash() };
     let body;
     if (this.state.route === 'signin') body = this.signin();
     else if (this.state.route === 'createorg') body = this.createOrg();
