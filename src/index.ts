@@ -14,6 +14,7 @@ import tokenRoutes from "./routes/tokens";
 import orgRoutes from "./routes/orgs";
 import lfsRoutes from "./routes/lfs";
 import lockRoutes from "./routes/locks";
+import webhookRoutes from "./routes/webhooks";
 
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 
@@ -43,6 +44,10 @@ app.get("/healthz", (c) => c.text("ok\n"));
 app.route("/auth", authRoutes);
 app.route("/tokens", tokenRoutes);
 app.route("/orgs", orgRoutes);
+
+// Inbound provider webhooks (signature-verified, not behind auth). Must be
+// mounted before the greedy /:repo route so it isn't swallowed.
+app.route("/webhooks", webhookRoutes);
 
 // Per-repo git-lfs surface. git-lfs derives these from .lfsconfig's lfs.url:
 //   {lfs.url}/objects/batch  and  {lfs.url}/locks...

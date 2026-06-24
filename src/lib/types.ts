@@ -24,6 +24,12 @@ export interface Env {
   R2_ACCESS_KEY_ID?: string;
   R2_SECRET_ACCESS_KEY?: string;
   R2_BUCKET?: string;
+
+  // Billing via Polar (Merchant of Record).
+  POLAR_SERVER?: string; // "sandbox" (default) | "production"
+  POLAR_ACCESS_TOKEN?: string; // org access token (secret)
+  POLAR_WEBHOOK_SECRET?: string; // Standard Webhooks secret, whsec_… (secret)
+  POLAR_PRODUCT_ID?: string; // the per-seat subscription product UUID
 }
 
 export interface User {

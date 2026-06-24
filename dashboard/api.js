@@ -89,6 +89,17 @@
     });
     return { members: members, invites: invites };
   }
+  function mapBilling(bd) {
+    bd = bd || {};
+    var active = bd.status === "active" || bd.status === "trialing";
+    return {
+      plan: bd.plan || "free", status: bd.status || "none", active: active,
+      seatsPaid: bd.seatsPaid || 0, seatsUsed: bd.seatsUsed != null ? bd.seatsUsed : null,
+      freeSeats: bd.freeSeats || 5, seatPrice: bd.seatPrice || 12,
+      currentPeriodEnd: bd.currentPeriodEnd || null, renewLabel: bd.currentPeriodEnd ? dateFmt(bd.currentPeriodEnd) : null,
+      configured: !!bd.configured, hasCustomer: !!bd.hasCustomer, canManage: !!bd.canManage,
+    };
+  }
   function mapActivity(activityData, user) {
     var ICON = { org: "building-2", storage: "database", repo: "box", token: "key-round", lock: "lock", unlock: "lock-open", force_unlock: "shield-alert", push: "git-commit-horizontal" };
     var TINT = { org: "var(--status-synced)", storage: "var(--amber-400)", repo: "var(--status-mine)", token: "var(--status-pending)", lock: "var(--status-locked)", unlock: "var(--status-synced)", force_unlock: "var(--status-locked)", push: "var(--status-synced)" };
@@ -97,20 +108,22 @@
       return { who: e.who || fallbackWho, what: e.what, when: timeAgo(e.when), icon: ICON[e.kind] || "activity", tint: TINT[e.kind] || "var(--text-muted)" };
     });
   }
-  function mapOrg(o, repos, tokens, storage, usageData, activityData, membersData, user) {
+  function mapOrg(o, repos, tokens, storage, usageData, activityData, membersData, billingData, user) {
     var statsByRepo = {};
     ((usageData && usageData.byRepo) || []).forEach(function (br) { statsByRepo[br.repo] = br; });
     var mm = mapMembers(membersData, user);
+    var mb = mapBilling(billingData);
     var members = mm.members.length ? mm.members
       : [{ userId: user && user.id, name: (user && user.name) || "You", email: (user && user.email) || "you@local.dev", role: ROLE[o.role] || "Owner", you: true }];
     return {
       id: o.id, name: o.name, slug: o.slug,
       role: ROLE[o.role] || "Member",
       plan: o.plan === "free" ? "Indie" : (o.plan || "Studio"),
-      seatPrice: 12, seatsTotal: Math.max(FREE_SEATS, members.length),
+      seatPrice: mb.seatPrice, seatsTotal: mb.active ? Math.max(mb.seatsPaid, members.length) : Math.max(mb.freeSeats, members.length),
       storage: mapStorage(storage, usageData),
       members: members,
       invites: mm.invites,
+      billing: mb,
       repos: repos.map(function (r) { return mapRepo(r, statsByRepo[r.slug]); }),
       tokens: tokens.map(mapToken),
       invoices: [],
@@ -145,8 +158,9 @@
                 req("GET", "/orgs/" + o.id + "/storage/usage").catch(function () { return null; }),
                 req("GET", "/orgs/" + o.id + "/activity").catch(function () { return null; }),
                 req("GET", "/orgs/" + o.id + "/members").catch(function () { return null; }),
+                req("GET", "/orgs/" + o.id + "/billing").catch(function () { return null; }),
               ]).then(function (rs) {
-                return mapOrg(o, (rs[0] && rs[0].repos) || [], tokens, rs[1] && rs[1].storage, rs[2], rs[3], rs[4], user);
+                return mapOrg(o, (rs[0] && rs[0].repos) || [], tokens, rs[1] && rs[1].storage, rs[2], rs[3], rs[4], rs[5], user);
               });
             }));
           }).then(function (orgsArr) {
@@ -181,5 +195,7 @@
     setRole: function (orgId, userId, role) { return req("POST", "/orgs/" + orgId + "/members/" + userId + "/role", { role: (role || "member").toLowerCase() }); },
     removeMember: function (orgId, userId) { return req("DELETE", "/orgs/" + orgId + "/members/" + userId); },
     acceptInvite: function (token) { return req("POST", "/orgs/accept-invite", { token: token }); },
+    startCheckout: function (orgId) { return req("POST", "/orgs/" + orgId + "/billing/checkout", {}); },
+    openPortal: function (orgId) { return req("POST", "/orgs/" + orgId + "/billing/portal", {}); },
   };
 })();

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<script src="api.js?v=7390a54b"></script>
+<script src="api.js?v=4c96abbb"></script>
 <script src="./support.js"></script>
 </head>
 <body>
@@ -963,36 +963,57 @@ class Component extends DCLogic {
   billing() {
     const org = this.org();
     const { Card, Button, StatBlock, Badge } = this.D;
-    const seats = org.members.length, monthly = seats * org.seatPrice;
+    const b = org.billing || {};
+    const canManage = b.canManage || org.role === 'Owner' || org.role === 'Admin';
+    const seatsUsed = b.seatsUsed != null ? b.seatsUsed : org.members.length;
+    const seatPrice = b.seatPrice || org.seatPrice || 12;
+    const billedSeats = b.active ? Math.max(b.seatsPaid || 0, seatsUsed) : seatsUsed;
+    const monthly = billedSeats * seatPrice;
+    const statusTone = b.active ? 'green' : (b.status === 'past_due' || b.status === 'canceled' ? 'red' : 'neutral');
+    const subscribe = () => {
+      if (!window.LSAPI) return this.flash('Billing not connected', 'locked');
+      this.flash('Opening checkout\u2026', 'mine');
+      window.LSAPI.startCheckout(this.state.orgId).then(r => { if (r && r.url) window.location.href = r.url; }).catch(e => this.flash('Checkout failed: ' + e.message, 'conflict'));
+    };
+    const portal = () => {
+      if (!window.LSAPI) return;
+      this.flash('Opening Polar\u2026', 'mine');
+      window.LSAPI.openPortal(this.state.orgId).then(r => { if (r && r.url) window.open(r.url, '_blank'); }).catch(e => this.flash(e.message, 'conflict'));
+    };
     return this.pageWrap([
-      this.pageHead('Billing', 'You pay per seat. Your storage is your own bucket \u2014 Lockstep never touches those bytes.', null),
+      this.pageHead('Billing', 'You pay per seat. Storage is your own bucket \u2014 Lockstep never touches those bytes. Payments run through Polar, your Merchant of Record.', null),
+      !b.configured && h(Card, { pad: 'lg', style: { marginBottom: 14, borderColor: 'var(--amber-400)' } },
+        h('div', { style: { display: 'flex', gap: 12 } },
+          h(Icon, { n: 'info', s: 18, color: 'var(--amber-400)', style: { flex: 'none', marginTop: 2 } }),
+          h('div', null,
+            h('div', { style: { font: '600 14px/1.4 Sora, sans-serif', color: 'var(--text-strong)' } }, 'Billing isn\u2019t switched on yet'),
+            h('div', { style: { font: '400 13px/1.5 Sora, sans-serif', color: 'var(--text-secondary)', marginTop: 4 } }, 'Connect a Polar account (product + token + webhook) to charge for seats. Until then everyone is on the free tier (' + (b.freeSeats || 5) + ' seats included).')))),
       h('div', { style: { display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 14, alignItems: 'start' } },
         h(Card, { pad: 'lg' },
           h('div', { style: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18 } },
             h('div', null, this.sectionLabel('Current plan'),
-              h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } }, h('span', { style: { font: '700 22px/1 Sora, sans-serif', color: 'var(--text-strong)' } }, org.plan), h(Badge, { tone: 'green', dot: true }, 'active'))),
-            h(Button, { variant: 'secondary', size: 'sm', onClick: () => this.flash('Plan management \u2014 demo', 'mine') }, 'Change plan')),
+              h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } }, h('span', { style: { font: '700 22px/1 Sora, sans-serif', color: 'var(--text-strong)' } }, b.active ? 'Pro' : 'Free'), h(Badge, { tone: statusTone, dot: true }, b.status || 'free'))),
+            canManage && (b.active
+              ? h(Button, { variant: 'secondary', size: 'sm', iconLeft: h(Icon, { n: 'external-link', s: 14 }), onClick: portal }, 'Manage billing')
+              : h(Button, { variant: 'primary', size: 'sm', disabled: !b.configured, iconLeft: h(Icon, { n: 'arrow-up-circle', s: 15 }), onClick: subscribe }, 'Subscribe'))),
           h('div', { style: { display: 'flex', alignItems: 'flex-end', gap: 6, padding: '16px 0', borderTop: '1px solid var(--hairline)', borderBottom: '1px solid var(--hairline)' } },
             h('span', { style: { font: '700 40px/1 Sora, sans-serif', color: 'var(--text-strong)', letterSpacing: '-0.02em' } }, '$' + monthly),
             h('span', { style: { font: '500 14px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)', marginBottom: 6 } }, '/ mo')),
           h('div', { style: { display: 'flex', justifyContent: 'space-between', padding: '14px 0 4px', font: '400 13px/1.4 Sora, sans-serif', color: 'var(--text-secondary)' } },
-            h('span', null, seats + ' seats \u00d7 $' + org.seatPrice + ' / seat'), h('span', { style: { font: '600 13px/1 "Spline Sans Mono", monospace', color: 'var(--text-body)' } }, '$' + monthly + '.00')),
+            h('span', null, billedSeats + ' seats \u00d7 $' + seatPrice + ' / seat'), h('span', { style: { font: '600 13px/1 "Spline Sans Mono", monospace', color: 'var(--text-body)' } }, '$' + monthly + '.00')),
           h('div', { style: { display: 'flex', justifyContent: 'space-between', padding: '8px 0', font: '400 13px/1.4 Sora, sans-serif', color: 'var(--text-secondary)' } },
-            h('span', null, 'Storage (your ' + PROVIDERS[org.storage.provider].label + ' bucket)'), h('span', { style: { font: '600 13px/1 "Spline Sans Mono", monospace', color: 'var(--status-synced)' } }, org.storage.connected ? '~$6 \u00b7 billed by provider' : 'not connected')),
-          h('div', { style: { display: 'flex', gap: 8, marginTop: 14, padding: '12px 14px', borderRadius: 'var(--radius-md)', background: 'var(--status-synced-bg)', font: '400 12.5px/1.5 Sora, sans-serif', color: 'var(--text-secondary)' } }, h(Icon, { n: 'info', s: 15, color: 'var(--status-synced)', style: { flex: 'none', marginTop: 1 } }), h('span', null, h('b', { style: { color: 'var(--text-strong)', fontWeight: 600 } }, '$0 egress.'), ' Clones pull from your bucket directly \u2014 there\u2019s no per-clone bandwidth bill from Lockstep.'))),
+            h('span', null, 'Storage (your own bucket)'), h('span', { style: { font: '600 13px/1 "Spline Sans Mono", monospace', color: 'var(--status-synced)' } }, org.storage.connected ? 'billed by provider' : 'not connected')),
+          h('div', { style: { display: 'flex', gap: 8, marginTop: 14, padding: '12px 14px', borderRadius: 'var(--radius-md)', background: 'var(--status-synced-bg)', font: '400 12.5px/1.5 Sora, sans-serif', color: 'var(--text-secondary)' } }, h(Icon, { n: 'info', s: 15, color: 'var(--status-synced)', style: { flex: 'none', marginTop: 1 } }), h('span', null, h('b', { style: { color: 'var(--text-strong)', fontWeight: 600 } }, '$0 egress.'), ' Clones pull from your bucket directly \u2014 no per-clone bandwidth bill from Lockstep.'))),
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: 14 } },
-          h(Card, { pad: 'lg' }, this.sectionLabel('Payment method'),
-            h('div', { style: { display: 'flex', alignItems: 'center', gap: 12 } },
-              h('span', { style: { width: 42, height: 30, borderRadius: 6, background: 'linear-gradient(135deg,#2a3543,#161c24)', border: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' } }, h(Icon, { n: 'credit-card', s: 16 })),
-              h('div', { style: { flex: 1 } }, h('div', { style: { font: '600 13px/1.2 "Spline Sans Mono", monospace', color: 'var(--text-body)' } }, 'Visa \u00b7\u00b7\u00b7\u00b7 4242'), h('div', { style: { font: '400 11.5px/1 Sora, sans-serif', color: 'var(--text-muted)', marginTop: 3 } }, 'Expires 08 / 28')),
-              this.iconBtn('pencil', () => this.flash('Update card \u2014 demo', 'mine'), 'Update'))),
-          h(StatBlock, { label: 'Next invoice', value: '$' + monthly, unit: '/mo', accent: true, hint: 'renews 01 Jul 2026' }))),
-      h('div', { style: { marginTop: 22 } }, this.sectionLabel('Invoices'),
-        h(Card, { pad: 'none' }, org.invoices.map((inv, i) => h('div', { key: inv.id, style: { display: 'grid', gridTemplateColumns: '1fr 130px 90px 90px', alignItems: 'center', gap: 12, padding: '13px 18px', borderBottom: i < org.invoices.length - 1 ? '1px solid var(--hairline)' : 'none' } },
-          h('span', { style: { font: '600 12.5px/1 "Spline Sans Mono", monospace', color: 'var(--text-body)' } }, inv.id),
-          h('span', { style: { font: '400 12.5px/1 Sora, sans-serif', color: 'var(--text-muted)' } }, inv.date),
-          h(Badge, { tone: 'green', dot: true }, inv.status),
-          h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12 } }, h('span', { style: { font: '600 13px/1 "Spline Sans Mono", monospace', color: 'var(--text-strong)' } }, '$' + inv.amount), h('button', { onClick: () => this.flash('Downloading ' + inv.id + ' \u2014 demo', 'mine'), style: { border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', display: 'inline-flex' } }, h(Icon, { n: 'download', s: 15 })))))))
+          h(Card, { pad: 'lg' }, this.sectionLabel('Seats'),
+            h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 8 } },
+              h('span', { style: { font: '700 26px/1 Sora, sans-serif', color: 'var(--text-strong)' } }, seatsUsed),
+              h('span', { style: { font: '500 13px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, b.active ? ('/ ' + Math.max(b.seatsPaid || 0, seatsUsed) + ' paid') : ('/ ' + (b.freeSeats || 5) + ' free'))),
+            h('div', { style: { font: '400 12px/1.4 Sora, sans-serif', color: 'var(--text-muted)', marginTop: 6 } }, 'Every active member is one billed seat.')),
+          b.active
+            ? h(StatBlock, { label: 'Renews', value: b.renewLabel || '\u2014', accent: true, hint: 'managed by Polar' })
+            : h(Card, { pad: 'lg' }, this.sectionLabel('Merchant of Record'),
+                h('div', { style: { font: '400 12.5px/1.5 Sora, sans-serif', color: 'var(--text-secondary)' } }, 'Polar is the seller of record: it takes payment, handles global tax/VAT and issues invoices, then pays out to you. Card + invoices live in the Polar customer portal.')))),
     ], 1000);
   }
 

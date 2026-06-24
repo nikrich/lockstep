@@ -9,6 +9,7 @@ import { requireAuth } from "../lib/auth";
 import { uuid, aesEncrypt, randomId, sha256 } from "../lib/crypto";
 import { testConnection, usage } from "../lib/storage";
 import { orgRole } from "../lib/access";
+import { createCheckout, createPortalSession, billingConfigured } from "../lib/polar";
 
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 
@@ -381,6 +382,93 @@ async function ownerCount(env: Env, orgId: string): Promise<number> {
     .first<{ n: number }>();
   return row?.n ?? 0;
 }
+
+// --- Billing (Polar, Merchant of Record) ---
+
+const SEAT_PRICE = 12;
+const FREE_SEATS = 5;
+
+async function activeSeatCount(env: Env, orgId: string): Promise<number> {
+  const row = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM org_members WHERE org_id = ? AND seat_active = 1",
+  )
+    .bind(orgId)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+// Current billing state for the org (plan, status, seats, renewal).
+app.get("/:orgId/billing", async (c) => {
+  const { userId } = c.get("identity");
+  const orgId = c.req.param("orgId");
+  const role = await orgRole(c.env, orgId, userId);
+  if (!role) return c.json({ message: "not a member" }, 403);
+
+  const org = await c.env.DB.prepare(
+    "SELECT plan, subscription_status, seats_paid, current_period_end, polar_customer_id FROM orgs WHERE id = ?",
+  )
+    .bind(orgId)
+    .first<{
+      plan: string;
+      subscription_status: string | null;
+      seats_paid: number | null;
+      current_period_end: number | null;
+      polar_customer_id: string | null;
+    }>();
+  const seatsUsed = await activeSeatCount(c.env, orgId);
+
+  return c.json({
+    plan: org?.plan ?? "free",
+    status: org?.subscription_status ?? "none",
+    seatsPaid: org?.seats_paid ?? 0,
+    seatsUsed,
+    freeSeats: FREE_SEATS,
+    seatPrice: SEAT_PRICE,
+    currentPeriodEnd: org?.current_period_end ?? null,
+    hasCustomer: !!org?.polar_customer_id,
+    configured: billingConfigured(c.env),
+    canManage: isManager(role),
+  });
+});
+
+// Start a hosted Polar checkout for the org's current seat count.
+app.post("/:orgId/billing/checkout", async (c) => {
+  const id = c.get("identity");
+  const orgId = c.req.param("orgId");
+  if (!isManager(await orgRole(c.env, orgId, id.userId))) {
+    return c.json({ message: "must be an org owner or admin" }, 403);
+  }
+  const seats = Math.max(1, await activeSeatCount(c.env, orgId));
+  try {
+    const co = await createCheckout(c.env, {
+      orgId,
+      email: id.name.includes("@") ? id.name : null,
+      seats,
+      successUrl: `${c.env.DASHBOARD_URL}/#billing=success`,
+    });
+    return c.json({ url: co.url });
+  } catch (e) {
+    return c.json({ message: (e as Error).message }, 400);
+  }
+});
+
+// Customer portal: manage card + invoices on Polar's side.
+app.post("/:orgId/billing/portal", async (c) => {
+  const { userId } = c.get("identity");
+  const orgId = c.req.param("orgId");
+  if (!isManager(await orgRole(c.env, orgId, userId))) {
+    return c.json({ message: "must be an org owner or admin" }, 403);
+  }
+  const org = await c.env.DB.prepare("SELECT polar_customer_id FROM orgs WHERE id = ?")
+    .bind(orgId)
+    .first<{ polar_customer_id: string | null }>();
+  if (!org?.polar_customer_id) return c.json({ message: "no active subscription yet" }, 400);
+  try {
+    return c.json({ url: await createPortalSession(c.env, org.polar_customer_id) });
+  } catch (e) {
+    return c.json({ message: (e as Error).message }, 400);
+  }
+});
 
 // Recent activity. Dynamic actions (pushes, locks) come from the events table;
 // control-plane milestones (org/repo/storage/token created) are derived from
