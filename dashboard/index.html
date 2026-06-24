@@ -233,9 +233,19 @@ class Component extends DCLogic {
   }
   saveStorage() {
     const d = this.state.draft;
+    if (window.LSAPI) {
+      // Only mark connected after the SERVER validates + persists (the server
+      // runs a real connection test). On failure, stay on the form and explain.
+      this.setState({ testState: 'testing' });
+      window.LSAPI.saveStorage(this.state.orgId, d)
+        .then(() => window.LSAPI.bootstrap(this))
+        .then(() => { this.setState({ storageEditing: false, testState: 'idle' }); this.flash('Storage connected · ' + d.bucket, 'synced'); })
+        .catch((e) => { this.setState({ testState: 'fail' }); this.flash('Couldn’t connect: ' + (e && e.message ? e.message.replace(/^\d+\s*/, '') : 'check your keys'), 'conflict'); });
+      return;
+    }
     this.patchOrg(o => ({ storage: { ...o.storage, ...d, connected: true, storedGB: o.storage.storedGB || 0, blobs: o.storage.blobs || 0 } }));
     this.setState({ storageEditing: false, testState: 'idle' });
-    this.flash('Storage connected · bucket ' + d.bucket, 'synced'); if (window.LSAPI) window.LSAPI.saveStorage(this.state.orgId, d).catch(e => this.flash('Storage save failed: ' + e.message, 'conflict'));
+    this.flash('Storage connected · bucket ' + d.bucket, 'synced');
   }
 
   renderVals() {

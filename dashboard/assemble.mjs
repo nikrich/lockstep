@@ -47,11 +47,7 @@ const patches = [
     "if (ns && ns.Button && window.lucide) { this.D = ns; this.setState({ ready: true }); }",
     "if (ns && ns.Button && window.lucide) { this.D = ns; this.setState({ ready: true }); (function(self){var b=function(){if(window.LSAPI){window.LSAPI.bootstrap(self);}else{setTimeout(b,150);}};b();})(this); }",
   ],
-  // connect storage -> PUT /orgs/:id/storage (server validates + encrypts)
-  [
-    "this.flash('Storage connected · bucket ' + d.bucket, 'synced');",
-    "this.flash('Storage connected · bucket ' + d.bucket, 'synced'); if (window.LSAPI) window.LSAPI.saveStorage(this.state.orgId, d).catch(e => this.flash('Storage save failed: ' + e.message, 'conflict'));",
-  ],
+  // (storage connect is wired directly inside saveStorage() in the source)
   // create repo -> POST /orgs/:id/repos
   [
     "this.flash('Repository ' + name.trim() + ' created', 'mine');",
