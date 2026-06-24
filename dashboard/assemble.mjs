@@ -53,11 +53,7 @@ const patches = [
     "this.flash('Repository ' + name.trim() + ' created', 'mine');",
     "this.flash('Repository ' + name.trim() + ' created', 'mine'); if (window.LSAPI) window.LSAPI.createRepo(this.state.orgId, name.trim()).catch(e => this.flash('Create failed: ' + e.message, 'conflict'));",
   ],
-  // generate token -> POST /tokens
-  [
-    "this.flash('Token saved to ' + this.org().name, 'synced');",
-    "this.flash('Token saved to ' + this.org().name, 'synced'); if (window.LSAPI) window.LSAPI.createToken(m.name.trim(), scopes).catch(e => this.flash('Token save failed: ' + e.message, 'conflict'));",
-  ],
+  // (token creation is wired directly in the token dialog / commitToken)
 ];
 for (const [find, repl] of patches) {
   if (!dc.includes(find)) throw new Error("patch anchor not found: " + find.slice(0, 64));
