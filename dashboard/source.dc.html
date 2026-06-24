@@ -175,6 +175,9 @@ class Component extends DCLogic {
     toast: null,
     confirm: null,
     seatPulse: false,
+    cmdOpen: false,
+    cmdQuery: '',
+    helpOpen: false,
   };
 
   componentDidMount() {
@@ -184,7 +187,13 @@ class Component extends DCLogic {
       else setTimeout(tick, 40);
     };
     tick();
+    this._onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); this.setState(s => ({ cmdOpen: !s.cmdOpen, cmdQuery: '' })); }
+      else if (e.key === 'Escape') this.setState({ cmdOpen: false, helpOpen: false });
+    };
+    window.addEventListener('keydown', this._onKey);
   }
+  componentWillUnmount() { if (this._onKey) window.removeEventListener('keydown', this._onKey); }
 
   org() { return this.state.orgs[this.state.orgId]; }
   patchOrg(patch) {
@@ -239,7 +248,7 @@ class Component extends DCLogic {
         key: this.state.theme,
         'data-theme': this.state.theme,
         style: { height: '100%', width: '100%', background: 'var(--bg-app)', color: 'var(--text-body)', font: 'var(--role-body)', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
-      }, body, this.toastEl(), this.confirmEl(), this.tokenDialogEl()),
+      }, body, this.toastEl(), this.confirmEl(), this.tokenDialogEl(), this.cmdPalette(), this.helpPanel()),
     };
   }
 
@@ -319,9 +328,9 @@ class Component extends DCLogic {
       h('span', { style: { width: 1, height: 22, background: 'var(--hairline)', margin: '0 4px' } }),
       this.orgSwitcher(),
       h('div', { style: { flex: 1 } }),
-      this.iconBtn('command', () => this.flash('Command menu (\u2318K) \u2014 demo', 'mine'), 'Command menu'),
+      this.iconBtn('command', () => this.setState({ cmdOpen: true, cmdQuery: '' }), 'Command menu (\u2318K)'),
       this.themeToggle(),
-      this.iconBtn('life-buoy', () => this.flash('Docs & support \u2014 demo', 'mine'), 'Help'),
+      this.iconBtn('life-buoy', () => this.setState({ helpOpen: true }), 'Docs & support'),
       h('span', { style: { width: 1, height: 22, background: 'var(--hairline)', margin: '0 2px' } }),
       this.userButton());
   }
@@ -374,7 +383,7 @@ class Component extends DCLogic {
         this.menuItem(this.state.theme === 'dark' ? 'sun' : 'moon', this.state.theme === 'dark' ? 'Light theme' : 'Dark theme', () => this.setState(s => ({ theme: s.theme === 'dark' ? 'light' : 'dark', userMenuOpen: false }))),
         h('div', { key: 'd', style: { height: 1, background: 'var(--hairline)', margin: '6px 0' } }),
         this.menuItem('log-out', 'Sign out', () => this.setState({ route: 'signin', userMenuOpen: false }), 'var(--status-conflict)'),
-      ]));
+      ], 'right'));
   }
 
   menuItem(icon, label, onClick, color) {
@@ -384,10 +393,11 @@ class Component extends DCLogic {
       h(Icon, { n: icon, s: 16, color: color || 'var(--text-muted)' }), label);
   }
 
-  dropdown(width, children) {
+  dropdown(width, children, align) {
+    const pos = align === 'right' ? { right: 0 } : { left: 0 };
     return h(React.Fragment, null,
       h('div', { onClick: () => this.setState({ orgMenuOpen: false, userMenuOpen: false }), style: { position: 'fixed', inset: 0, zIndex: 60 } }),
-      h('div', { style: { position: 'absolute', top: 46, left: 0, width, padding: 6, background: 'var(--surface-raised)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-lg)', zIndex: 70, animation: 'ls-fade .14s var(--ease-out)' } }, children));
+      h('div', { style: { position: 'absolute', top: 46, ...pos, width, padding: 6, background: 'var(--surface-raised)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-lg)', zIndex: 70, animation: 'ls-fade .14s var(--ease-out)' } }, children));
   }
 
   orgTile(o, size) {
@@ -395,6 +405,77 @@ class Component extends DCLogic {
     const tint = tints[o.id] || '#3b9eff';
     const init = o.name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
     return h('span', { style: { width: size, height: size, flex: 'none', borderRadius: Math.round(size * 0.28), background: 'color-mix(in srgb, ' + tint + ' 22%, var(--surface-card))', color: tint, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', font: '700 ' + Math.round(size * 0.42) + 'px/1 Sora, sans-serif', border: '1px solid color-mix(in srgb, ' + tint + ' 28%, transparent)' } }, init);
+  }
+
+  // ================= COMMAND PALETTE (⌘K) =================
+  commands() {
+    const go = (id) => () => { this.setState({ cmdOpen: false }); this.go(id); };
+    return [
+      { icon: 'layout-dashboard', label: 'Go to Overview', kind: 'Navigate', run: go('home') },
+      { icon: 'hard-drive', label: 'Go to Storage', kind: 'Navigate', run: go('storage') },
+      { icon: 'users', label: 'Go to Members', kind: 'Navigate', run: go('members') },
+      { icon: 'box', label: 'Go to Repositories', kind: 'Navigate', run: go('repos') },
+      { icon: 'key-round', label: 'Go to Access tokens', kind: 'Navigate', run: go('tokens') },
+      { icon: 'credit-card', label: 'Go to Billing', kind: 'Navigate', run: go('billing') },
+      { icon: 'settings', label: 'Go to Settings', kind: 'Navigate', run: go('settings') },
+      { icon: 'box', label: 'Create repository', kind: 'Action', run: () => this.setState({ cmdOpen: false, nav: 'repos', confirm: { create: true }, newOrgName: '' }) },
+      { icon: 'key-round', label: 'Generate access token', kind: 'Action', run: () => this.setState({ cmdOpen: false, nav: 'tokens', tokenModal: { step: 'form', name: '', scopes: { lock: true, read: true, write: true } } }) },
+      { icon: 'database', label: 'Connect storage', kind: 'Action', run: () => { this.setState({ cmdOpen: false, nav: 'storage', storageEditing: true }); this.ensureDraft(); } },
+      { icon: this.state.theme === 'dark' ? 'sun' : 'moon', label: 'Toggle theme', kind: 'Action', run: () => this.setState(s => ({ cmdOpen: false, theme: s.theme === 'dark' ? 'light' : 'dark' })) },
+      { icon: 'book-open', label: 'Open documentation', kind: 'Help', run: () => { this.setState({ cmdOpen: false }); window.open('https://github.com/nikrich/lockstep#readme', '_blank'); } },
+      { icon: 'life-buoy', label: 'Contact support', kind: 'Help', run: () => this.setState({ cmdOpen: false, helpOpen: true }) },
+      { icon: 'log-out', label: 'Sign out', kind: 'Account', run: () => this.setState({ cmdOpen: false, route: 'signin' }) },
+    ];
+  }
+  cmdPalette() {
+    if (!this.state.cmdOpen || this.state.route !== 'app') return null;
+    const q = (this.state.cmdQuery || '').toLowerCase();
+    const list = this.commands().filter(c => !q || c.label.toLowerCase().includes(q) || c.kind.toLowerCase().includes(q));
+    return h('div', { onClick: () => this.setState({ cmdOpen: false }), style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '12vh', zIndex: 850, animation: 'ls-fade .14s var(--ease-out)' } },
+      h('div', { onClick: e => e.stopPropagation(), style: { width: 560, maxWidth: '92vw', background: 'var(--surface-card)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-xl)', overflow: 'hidden', animation: 'ls-pop .18s var(--ease-out)' } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderBottom: '1px solid var(--hairline)' } },
+          h(Icon, { n: 'search', s: 17, color: 'var(--text-muted)' }),
+          h('input', { autoFocus: true, value: this.state.cmdQuery, onChange: e => this.setState({ cmdQuery: e.target.value }), placeholder: 'Type a command or search…', style: { flex: 1, border: 'none', outline: 'none', background: 'transparent', color: 'var(--text-strong)', font: '500 15px/1 Sora, sans-serif' } }),
+          h('span', { style: { font: '600 10px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)', border: '1px solid var(--border-default)', borderRadius: 4, padding: '4px 6px' } }, 'ESC')),
+        h('div', { style: { maxHeight: 360, overflowY: 'auto', padding: 8 } },
+          list.length === 0
+            ? h('div', { style: { padding: 24, textAlign: 'center', font: '500 13px/1 Sora, sans-serif', color: 'var(--text-muted)' } }, 'No commands match.')
+            : list.map((c, i) => h('button', { key: i, onClick: c.run,
+                onMouseEnter: e => e.currentTarget.style.background = 'var(--surface-hover)', onMouseLeave: e => e.currentTarget.style.background = 'transparent',
+                style: { display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '10px 12px', border: 'none', background: 'transparent', borderRadius: 'var(--radius-md)', cursor: 'pointer', textAlign: 'left' } },
+                h('span', { style: { width: 28, height: 28, flex: 'none', borderRadius: 7, background: 'var(--surface-sunken)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' } }, h(Icon, { n: c.icon, s: 15 })),
+                h('span', { style: { flex: 1, font: '500 14px/1 Sora, sans-serif', color: 'var(--text-body)' } }, c.label),
+                h('span', { style: { font: '600 10px/1 "Spline Sans Mono", monospace', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' } }, c.kind))))));
+  }
+
+  // ================= DOCS & SUPPORT =================
+  helpPanel() {
+    if (!this.state.helpOpen) return null;
+    const { Button } = this.D;
+    const link = (icon, label, sub, onClick) => h('button', { key: label, onClick,
+      onMouseEnter: e => e.currentTarget.style.background = 'var(--surface-hover)', onMouseLeave: e => e.currentTarget.style.background = 'transparent',
+      style: { display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '12px 13px', border: '1px solid var(--border-subtle)', background: 'transparent', borderRadius: 'var(--radius-md)', cursor: 'pointer', textAlign: 'left' } },
+      h('span', { style: { width: 32, height: 32, flex: 'none', borderRadius: 8, background: 'var(--surface-sunken)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: 'var(--amber-400)' } }, h(Icon, { n: icon, s: 16 })),
+      h('div', { style: { flex: 1, minWidth: 0 } },
+        h('div', { style: { font: '600 13.5px/1.2 Sora, sans-serif', color: 'var(--text-strong)' } }, label),
+        h('div', { style: { font: '400 12px/1.3 Sora, sans-serif', color: 'var(--text-muted)', marginTop: 2 } }, sub)),
+      h(Icon, { n: 'arrow-up-right', s: 15, color: 'var(--text-muted)' }));
+    return this.modalShell(() => this.setState({ helpOpen: false }), 460, [
+      h('div', { key: 'b', style: { padding: 22 } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 } },
+          h('span', { style: { width: 30, height: 30, borderRadius: 8, background: 'var(--status-locked-bg)', color: 'var(--amber-400)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' } }, h(Icon, { n: 'life-buoy', s: 17 })),
+          h('div', { style: { font: '600 16px/1.2 Sora, sans-serif', color: 'var(--text-strong)' } }, 'Docs & support')),
+        h('div', { style: { font: '400 13px/1.5 Sora, sans-serif', color: 'var(--text-muted)', margin: '4px 0 16px' } }, 'Guides, the source code, and a human when you need one.'),
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
+          link('book-open', 'Documentation', 'Setup, storage, locking & the API', () => window.open('https://github.com/nikrich/lockstep#readme', '_blank')),
+          link('github', 'Source on GitHub', 'github.com/nikrich/lockstep', () => window.open('https://github.com/nikrich/lockstep', '_blank')),
+          link('messages-square', 'Contact support', 'hello@lockstepcloud.com', () => window.open('mailto:hello@lockstepcloud.com', '_blank')),
+          link('command', 'Keyboard shortcuts', 'Press ⌘K for the command menu', () => this.setState({ helpOpen: false, cmdOpen: true, cmdQuery: '' })))),
+      h('div', { key: 'a', style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 22px', borderTop: '1px solid var(--hairline)' } },
+        h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 7, font: '500 12px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } },
+          h('span', { style: { width: 7, height: 7, borderRadius: '50%', background: 'var(--status-synced)', boxShadow: '0 0 7px var(--status-synced)' } }), 'All systems operational'),
+        h(Button, { variant: 'secondary', size: 'sm', onClick: () => this.setState({ helpOpen: false }) }, 'Close'))
+    ]);
   }
 
   sidebar() {
@@ -424,8 +505,8 @@ class Component extends DCLogic {
       h('div', { style: { padding: 12, borderTop: '1px solid var(--hairline)' } },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '2px 2px' } },
           h('span', { style: { width: 8, height: 8, borderRadius: '50%', background: 'var(--status-synced)', boxShadow: '0 0 8px var(--status-synced)', flex: 'none' } }),
-          h('span', { style: { flex: 1, font: '500 11px/1.3 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, 'api.lockstepcloud.com'),
-          h('span', { style: { font: '500 11px/1 "Spline Sans Mono", monospace', color: 'var(--status-synced)' } }, 'operational'))));
+          h('span', { style: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', font: '500 11px/1.3 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, 'api.lockstepcloud.com'),
+          h('span', { style: { flex: 'none', font: '500 11px/1 "Spline Sans Mono", monospace', color: 'var(--status-synced)' } }, 'operational'))));
   }
 
   navItem(it) {
