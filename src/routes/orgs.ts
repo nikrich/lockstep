@@ -6,7 +6,7 @@
 import { Hono } from "hono";
 import type { Env, Vars } from "../lib/types";
 import { requireAuth } from "../lib/auth";
-import { uuid, aesEncrypt } from "../lib/crypto";
+import { uuid, aesEncrypt, randomId, sha256 } from "../lib/crypto";
 import { testConnection, usage } from "../lib/storage";
 import { orgRole } from "../lib/access";
 
@@ -196,6 +196,191 @@ app.get("/:orgId/repos", async (c) => {
     .all();
   return c.json({ repos: results });
 });
+
+// --- Members, seats & invites ---
+
+const isManager = (role: string | null) => role === "owner" || role === "admin";
+
+// List members (joined with their profile) + pending invites + seat usage.
+app.get("/:orgId/members", async (c) => {
+  const { userId } = c.get("identity");
+  const orgId = c.req.param("orgId");
+  const role = await orgRole(c.env, orgId, userId);
+  if (!role) return c.json({ message: "not a member" }, 403);
+
+  const { results: members } = await c.env.DB.prepare(
+    `SELECT m.user_id, m.role, m.seat_active, m.created_at,
+            u.name, u.email, u.avatar_url
+       FROM org_members m JOIN users u ON u.id = m.user_id
+      WHERE m.org_id = ? ORDER BY m.created_at ASC`,
+  )
+    .bind(orgId)
+    .all();
+
+  const { results: invites } = await c.env.DB.prepare(
+    "SELECT id, email, role, created_at, expires_at FROM invites WHERE org_id = ? ORDER BY created_at DESC",
+  )
+    .bind(orgId)
+    .all();
+
+  return c.json({ members, invites, you: userId, canManage: isManager(role) });
+});
+
+// Invite a teammate (owner/admin). No email service yet → we return a shareable
+// accept link carrying the raw token for the admin to send.
+app.post("/:orgId/invites", async (c) => {
+  const { userId } = c.get("identity");
+  const orgId = c.req.param("orgId");
+  if (!isManager(await orgRole(c.env, orgId, userId))) {
+    return c.json({ message: "must be an org owner or admin" }, 403);
+  }
+
+  const b = await c.req.json<{ email?: string; role?: string }>().catch(() => ({}) as { email?: string; role?: string });
+  const email = b.email?.trim().toLowerCase();
+  const inviteRole = b.role === "admin" ? "admin" : "member";
+  if (!email || !/.+@.+\..+/.test(email)) return c.json({ message: "a valid email is required" }, 400);
+
+  const already = await c.env.DB.prepare(
+    "SELECT 1 FROM org_members m JOIN users u ON u.id = m.user_id WHERE m.org_id = ? AND lower(u.email) = ?",
+  )
+    .bind(orgId, email)
+    .first();
+  if (already) return c.json({ message: "that person is already a member" }, 409);
+
+  const raw = randomId(24);
+  const id = uuid();
+  const created = now();
+  const expires = created + 14 * 24 * 3600; // 14 days
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO invites (id, org_id, email, role, token_hash, expires_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(id, orgId, email, inviteRole, await sha256(raw), expires, created)
+      .run();
+  } catch {
+    return c.json({ message: "an invite for that email already exists" }, 409);
+  }
+  return c.json(
+    {
+      invite: { id, email, role: inviteRole, created_at: created, expires_at: expires },
+      acceptUrl: `${c.env.DASHBOARD_URL}/#invite=${raw}`,
+    },
+    201,
+  );
+});
+
+// Revoke a pending invite (owner/admin).
+app.delete("/:orgId/invites/:inviteId", async (c) => {
+  const { userId } = c.get("identity");
+  const orgId = c.req.param("orgId");
+  if (!isManager(await orgRole(c.env, orgId, userId))) {
+    return c.json({ message: "must be an org owner or admin" }, 403);
+  }
+  await c.env.DB.prepare("DELETE FROM invites WHERE id = ? AND org_id = ?")
+    .bind(c.req.param("inviteId"), orgId)
+    .run();
+  return c.body(null, 204);
+});
+
+// Accept an invite (any authenticated user). Matches the raw token, adds the
+// caller as a member, and consumes the invite.
+app.post("/accept-invite", async (c) => {
+  const { userId } = c.get("identity");
+  const b = await c.req.json<{ token?: string }>().catch(() => ({}) as { token?: string });
+  if (!b.token) return c.json({ message: "token is required" }, 400);
+
+  const invite = await c.env.DB.prepare(
+    "SELECT id, org_id, role, expires_at FROM invites WHERE token_hash = ?",
+  )
+    .bind(await sha256(b.token))
+    .first<{ id: string; org_id: string; role: string; expires_at: number }>();
+  if (!invite) return c.json({ message: "invite not found or already used" }, 404);
+  if (invite.expires_at < now()) {
+    await c.env.DB.prepare("DELETE FROM invites WHERE id = ?").bind(invite.id).run();
+    return c.json({ message: "invite expired" }, 410);
+  }
+
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `INSERT INTO org_members (org_id, user_id, role, seat_active, created_at)
+       VALUES (?, ?, ?, 1, ?)
+       ON CONFLICT(org_id, user_id) DO NOTHING`,
+    ).bind(invite.org_id, userId, invite.role, now()),
+    c.env.DB.prepare("DELETE FROM invites WHERE id = ?").bind(invite.id),
+  ]);
+  return c.json({ ok: true, orgId: invite.org_id });
+});
+
+// Change a member's role (owner/admin). Only an owner may grant owner; the last
+// owner can't be demoted.
+app.post("/:orgId/members/:memberId/role", async (c) => {
+  const { userId } = c.get("identity");
+  const orgId = c.req.param("orgId");
+  const memberId = c.req.param("memberId");
+  const myRole = await orgRole(c.env, orgId, userId);
+  if (!isManager(myRole)) return c.json({ message: "must be an org owner or admin" }, 403);
+
+  const b = await c.req.json<{ role?: string }>().catch(() => ({}) as { role?: string });
+  const newRole = b.role;
+  if (!newRole || !["owner", "admin", "member"].includes(newRole)) {
+    return c.json({ message: "role must be owner, admin or member" }, 400);
+  }
+  if (newRole === "owner" && myRole !== "owner") {
+    return c.json({ message: "only an owner can assign owner" }, 403);
+  }
+
+  const target = await c.env.DB.prepare("SELECT role FROM org_members WHERE org_id = ? AND user_id = ?")
+    .bind(orgId, memberId)
+    .first<{ role: string }>();
+  if (!target) return c.json({ message: "member not found" }, 404);
+  if (target.role === "owner" && newRole !== "owner" && (await ownerCount(c.env, orgId)) <= 1) {
+    return c.json({ message: "cannot demote the last owner" }, 409);
+  }
+
+  await c.env.DB.prepare("UPDATE org_members SET role = ? WHERE org_id = ? AND user_id = ?")
+    .bind(newRole, orgId, memberId)
+    .run();
+  return c.json({ ok: true });
+});
+
+// Remove a member (owner/admin). Releases their locks + frees the seat; the
+// last owner can't be removed.
+app.delete("/:orgId/members/:memberId", async (c) => {
+  const { userId } = c.get("identity");
+  const orgId = c.req.param("orgId");
+  const memberId = c.req.param("memberId");
+  if (!isManager(await orgRole(c.env, orgId, userId))) {
+    return c.json({ message: "must be an org owner or admin" }, 403);
+  }
+
+  const target = await c.env.DB.prepare("SELECT role FROM org_members WHERE org_id = ? AND user_id = ?")
+    .bind(orgId, memberId)
+    .first<{ role: string }>();
+  if (!target) return c.json({ message: "member not found" }, 404);
+  if (target.role === "owner" && (await ownerCount(c.env, orgId)) <= 1) {
+    return c.json({ message: "cannot remove the last owner" }, 409);
+  }
+
+  await c.env.DB.prepare(
+    "DELETE FROM locks WHERE owner_id = ? AND repo_id IN (SELECT id FROM repos WHERE org_id = ?)",
+  )
+    .bind(memberId, orgId)
+    .run();
+  await c.env.DB.prepare("DELETE FROM org_members WHERE org_id = ? AND user_id = ?")
+    .bind(orgId, memberId)
+    .run();
+  return c.body(null, 204);
+});
+
+async function ownerCount(env: Env, orgId: string): Promise<number> {
+  const row = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM org_members WHERE org_id = ? AND role = 'owner'",
+  )
+    .bind(orgId)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
 
 // Recent activity. Dynamic actions (pushes, locks) come from the events table;
 // control-plane milestones (org/repo/storage/token created) are derived from

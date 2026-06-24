@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<script src="api.js?v=8fb431f7"></script>
+<script src="api.js?v=7390a54b"></script>
 <script src="./support.js"></script>
 </head>
 <body>
@@ -795,7 +795,7 @@ class Component extends DCLogic {
           h('div', { style: { font: '600 13.5px/1.2 Sora, sans-serif', color: 'var(--text-strong)' } }, m.name, m.you && h('span', { style: { font: '500 11px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)', marginLeft: 7 } }, 'you')),
           h('div', { style: { font: '500 11.5px/1.2 "Spline Sans Mono", monospace', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, m.email))),
       this.roleControl(m, canManage),
-      canManage && !m.you ? this.iconBtn('user-minus', () => this.setState({ confirm: { title: 'Remove ' + m.name + '?', body: m.name + ' will lose access to ' + org.name + ' and free up a seat. Their locks are released.', danger: 'Remove member', onOk: () => { this.patchOrg(o => ({ members: o.members.filter(x => x.email !== m.email) })); this.flash(m.name + ' removed \u00b7 seat freed', 'mine'); } } }), 'Remove') : h('span'));
+      canManage && !m.you ? this.iconBtn('user-minus', () => this.setState({ confirm: { title: 'Remove ' + m.name + '?', body: m.name + ' will lose access to ' + org.name + ' and free up a seat. Their locks are released.', danger: 'Remove member', onOk: () => { if (!window.LSAPI) { this.patchOrg(o => ({ members: o.members.filter(x => x.email !== m.email) })); this.flash(m.name + ' removed \u00b7 seat freed', 'mine'); return; } window.LSAPI.removeMember(this.state.orgId, m.userId).then(() => window.LSAPI.bootstrap(this)).then(() => this.flash(m.name + ' removed \u00b7 seat freed', 'mine')).catch(e => this.flash('Remove failed: ' + e.message, 'conflict')); } } }), 'Remove') : h('span'));
 
     return this.pageWrap([
       this.pageHead('Members & seats', 'Invite the team, set roles, manage seats. Only Owner & Admin can manage storage, members and billing.', null),
@@ -806,11 +806,26 @@ class Component extends DCLogic {
           h('div', { style: { flex: 1 } }, h(Input, { placeholder: 'name@studio.com', iconLeft: h(Icon, { n: 'mail', s: 15 }), value: this.state.inviteEmail, onChange: e => this.setState({ inviteEmail: e.target.value }) })),
           h(Segmented, { value: this.state.inviteRole, onChange: v => this.setState({ inviteRole: v }), options: [{ value: 'Member', label: 'Member' }, { value: 'Admin', label: 'Admin' }] }),
           h(Button, { variant: 'primary', disabled: !emailValid || seats + org.invites.length >= total, iconLeft: h(Icon, { n: 'send', s: 15 }), onClick: () => {
-            this.patchOrg(o => ({ invites: [{ email: this.state.inviteEmail, role: this.state.inviteRole, sent: 'just now' }, ...o.invites] }));
-            this.flash('Invite sent to ' + this.state.inviteEmail, 'mine');
-            this.setState({ inviteEmail: '' });
+            const email = this.state.inviteEmail, role = this.state.inviteRole;
+            if (!window.LSAPI) { this.patchOrg(o => ({ invites: [{ email, role, sent: 'just now' }, ...o.invites] })); this.flash('Invite sent to ' + email, 'mine'); this.setState({ inviteEmail: '' }); return; }
+            this.flash('Creating invite…', 'mine');
+            window.LSAPI.invite(this.state.orgId, email, role).then(res => {
+              const link = res && res.acceptUrl;
+              if (link && navigator.clipboard) navigator.clipboard.writeText(link).catch(() => {});
+              this.setState({ inviteEmail: '', lastInvite: { email, link } });
+              return window.LSAPI.bootstrap(this).then(() => this.flash('Invite link copied — send it to ' + email, 'mine'));
+            }).catch(e => this.flash('Invite failed: ' + e.message, 'conflict'));
           } }, 'Send invite')),
         seats + org.invites.length >= total && h('div', { style: { marginTop: 10, font: '400 12px/1.3 Sora, sans-serif', color: 'var(--status-locked)' } }, 'All seats are spoken for. Free a seat or raise your plan limit in Billing.')),
+      this.state.lastInvite && this.state.lastInvite.link && h(this.D.Card, { pad: 'md', style: { marginTop: 12, borderColor: 'var(--status-mine)' } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'space-between', flexWrap: 'wrap' } },
+          h('div', { style: { minWidth: 0, flex: 1 } },
+            h('div', { style: { font: '600 12.5px/1.3 Sora, sans-serif', color: 'var(--text-strong)' } }, 'Invite link for ' + this.state.lastInvite.email + ' · copied to clipboard'),
+            h('div', { style: { font: '500 11px/1.5 "Spline Sans Mono", monospace', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, this.state.lastInvite.link),
+            h('div', { style: { font: '400 11px/1.4 Sora, sans-serif', color: 'var(--text-muted)', marginTop: 4 } }, 'No email is sent yet — share this link with them. They sign in and join automatically.')),
+          h('div', { style: { display: 'flex', gap: 8, flex: 'none' } },
+            h(this.D.Button, { variant: 'secondary', size: 'sm', iconLeft: h(Icon, { n: 'copy', s: 14 }), onClick: () => { if (navigator.clipboard) navigator.clipboard.writeText(this.state.lastInvite.link); this.flash('Copied', 'mine'); } }, 'Copy'),
+            this.iconBtn('x', () => this.setState({ lastInvite: null }), 'Dismiss')))),
       org.invites.length > 0 && h('div', { style: { marginTop: 22 } },
         this.sectionLabel('Pending invites \u00b7 ' + org.invites.length),
         h(Card, { pad: 'none' }, org.invites.map((iv, i) => h('div', { key: iv.email, style: { display: 'grid', gridTemplateColumns: '1fr 150px 40px', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: i < org.invites.length - 1 ? '1px solid var(--hairline)' : 'none' } },
@@ -820,7 +835,7 @@ class Component extends DCLogic {
               h('div', { style: { font: '600 13px/1.2 "Spline Sans Mono", monospace', color: 'var(--text-body)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, iv.email),
               h('div', { style: { font: '400 11.5px/1.2 Sora, sans-serif', color: 'var(--text-muted)' } }, 'Invited ' + iv.sent + ' \u00b7 awaiting sign-in'))),
           h(Badge, { tone: ROLE_TONE[iv.role], dot: true }, iv.role),
-          canManage ? this.iconBtn('x', () => { this.patchOrg(o => ({ invites: o.invites.filter(x => x.email !== iv.email) })); this.flash('Invite to ' + iv.email + ' revoked', 'locked'); }, 'Revoke') : h('span'))))),
+          canManage ? this.iconBtn('x', () => { if (!window.LSAPI) { this.patchOrg(o => ({ invites: o.invites.filter(x => x.email !== iv.email) })); this.flash('Invite revoked', 'locked'); return; } window.LSAPI.revokeInvite(this.state.orgId, iv.id).then(() => window.LSAPI.bootstrap(this)).then(() => this.flash('Invite to ' + iv.email + ' revoked', 'locked')).catch(e => this.flash('Revoke failed: ' + e.message, 'conflict')); }, 'Revoke') : h('span'))))),
       h('div', { style: { marginTop: 22 } },
         this.sectionLabel('Members \u00b7 ' + org.members.length),
         h(Card, { pad: 'none' }, org.members.map(memberRow)))
@@ -840,7 +855,7 @@ class Component extends DCLogic {
       open && h(React.Fragment, null,
         h('div', { onClick: () => this.setState({ roleMenu: null }), style: { position: 'fixed', inset: 0, zIndex: 60 } }),
         h('div', { style: { position: 'absolute', top: 34, right: 0, width: 150, padding: 5, background: 'var(--surface-raised)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)', zIndex: 70 } },
-          ['Owner', 'Admin', 'Member'].map(r => h('button', { key: r, onClick: () => { this.patchOrg(o => ({ members: o.members.map(x => x.email === m.email ? { ...x, role: r } : x) })); this.setState({ roleMenu: null }); this.flash(m.name + ' is now ' + r, 'mine'); },
+          ['Owner', 'Admin', 'Member'].map(r => h('button', { key: r, onClick: () => { this.setState({ roleMenu: null }); if (!window.LSAPI) { this.patchOrg(o => ({ members: o.members.map(x => x.email === m.email ? { ...x, role: r } : x) })); this.flash(m.name + ' is now ' + r, 'mine'); return; } window.LSAPI.setRole(this.state.orgId, m.userId, r).then(() => window.LSAPI.bootstrap(this)).then(() => this.flash(m.name + ' is now ' + r, 'mine')).catch(e => this.flash(e.message, 'conflict')); },
             onMouseEnter: e => e.currentTarget.style.background = 'var(--surface-hover)', onMouseLeave: e => e.currentTarget.style.background = 'transparent',
             style: { display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 8px', border: 'none', background: 'transparent', borderRadius: 'var(--radius-sm)', cursor: 'pointer', font: '500 12.5px/1 Sora, sans-serif', color: 'var(--text-body)', textAlign: 'left' } },
             h('span', { style: { width: 6, height: 6, borderRadius: '50%', background: r === 'Owner' ? 'var(--amber-400)' : r === 'Admin' ? 'var(--status-mine)' : 'var(--slate-400)' } }),

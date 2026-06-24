@@ -15,11 +15,14 @@
   // Capture a session token handed back by the OAuth callback (URL fragment),
   // store it, and clean the URL. The SPA then authenticates with a Bearer header
   // instead of a cross-subdomain cookie (which browsers routinely drop).
-  if (location.hash && location.hash.indexOf("s=") !== -1) {
-    var hm = location.hash.match(/s=([^&]+)/);
-    if (hm) localStorage.setItem("ls_session_token", decodeURIComponent(hm[1]));
-    history.replaceState(null, "", location.pathname + location.search);
-  }
+  // Tokens handed back via URL fragment: a session (#s=) from the OAuth
+  // callback, and/or an invite token (#invite=) from a shared invite link.
+  var _hash = location.hash || "";
+  var _sm = _hash.match(/[#&]s=([^&]+)/);
+  if (_sm) localStorage.setItem("ls_session_token", decodeURIComponent(_sm[1]));
+  var _im = _hash.match(/[#&]invite=([^&]+)/);
+  var PENDING_INVITE = _im ? decodeURIComponent(_im[1]) : null;
+  if (_sm || _im) history.replaceState(null, "", location.pathname + location.search);
   var SESSION_TOKEN = localStorage.getItem("ls_session_token");
 
   function headers(extra) {
@@ -75,6 +78,17 @@
     if (!s) return Object.assign({ connected: false, provider: "r2", endpoint: "", region: "auto", bucket: "", accessKeyId: "", secret: "", prefix: "" }, stats);
     return Object.assign({ connected: true, provider: s.provider || "r2", endpoint: s.endpoint || "", region: s.region || "auto", bucket: s.bucket || "", accessKeyId: s.accessKeyId || "", secret: "••••••••", prefix: s.prefix || "" }, stats);
   }
+  var FREE_SEATS = 5; // included seats until a paid plan raises the limit
+  function mapMembers(md, user) {
+    var you = (md && md.you) || (user && user.id);
+    var members = ((md && md.members) || []).map(function (m) {
+      return { userId: m.user_id, name: m.name || (m.email || "").split("@")[0] || "Member", email: m.email || "", role: ROLE[m.role] || "Member", you: m.user_id === you, joined: timeAgo(m.created_at) };
+    });
+    var invites = ((md && md.invites) || []).map(function (iv) {
+      return { id: iv.id, email: iv.email, role: ROLE[iv.role] || "Member", sent: timeAgo(iv.created_at) };
+    });
+    return { members: members, invites: invites };
+  }
   function mapActivity(activityData, user) {
     var ICON = { org: "building-2", storage: "database", repo: "box", token: "key-round", lock: "lock", unlock: "lock-open", force_unlock: "shield-alert", push: "git-commit-horizontal" };
     var TINT = { org: "var(--status-synced)", storage: "var(--amber-400)", repo: "var(--status-mine)", token: "var(--status-pending)", lock: "var(--status-locked)", unlock: "var(--status-synced)", force_unlock: "var(--status-locked)", push: "var(--status-synced)" };
@@ -83,17 +97,20 @@
       return { who: e.who || fallbackWho, what: e.what, when: timeAgo(e.when), icon: ICON[e.kind] || "activity", tint: TINT[e.kind] || "var(--text-muted)" };
     });
   }
-  function mapOrg(o, repos, tokens, storage, usageData, activityData, user) {
+  function mapOrg(o, repos, tokens, storage, usageData, activityData, membersData, user) {
     var statsByRepo = {};
     ((usageData && usageData.byRepo) || []).forEach(function (br) { statsByRepo[br.repo] = br; });
+    var mm = mapMembers(membersData, user);
+    var members = mm.members.length ? mm.members
+      : [{ userId: user && user.id, name: (user && user.name) || "You", email: (user && user.email) || "you@local.dev", role: ROLE[o.role] || "Owner", you: true }];
     return {
       id: o.id, name: o.name, slug: o.slug,
       role: ROLE[o.role] || "Member",
       plan: o.plan === "free" ? "Indie" : (o.plan || "Studio"),
-      seatPrice: 12, seatsTotal: o.seats || 1,
+      seatPrice: 12, seatsTotal: Math.max(FREE_SEATS, members.length),
       storage: mapStorage(storage, usageData),
-      members: [{ name: (user && user.name) || "You", email: (user && user.email) || "you@local.dev", role: ROLE[o.role] || "Owner", you: true }],
-      invites: [],
+      members: members,
+      invites: mm.invites,
       repos: repos.map(function (r) { return mapRepo(r, statsByRepo[r.slug]); }),
       tokens: tokens.map(mapToken),
       invoices: [],
@@ -111,7 +128,12 @@
     bootstrap: function (comp) {
       return req("GET", "/auth/me").then(function (meRes) {
         var user = (meRes && meRes.user) || null;
-        return req("GET", "/orgs").then(function (res) {
+        var pre = Promise.resolve();
+        if (user && PENDING_INVITE) {
+          var _tok = PENDING_INVITE; PENDING_INVITE = null;
+          pre = req("POST", "/orgs/accept-invite", { token: _tok }).catch(function () {});
+        }
+        return pre.then(function () { return req("GET", "/orgs"); }).then(function (res) {
           var list = (res && res.orgs) || [];
           if (!list.length) { comp.setState({ route: "createorg", user: user }); return; }
           return req("GET", "/tokens").catch(function () { return { tokens: [] }; }).then(function (tk) {
@@ -122,8 +144,9 @@
                 req("GET", "/orgs/" + o.id + "/storage").catch(function () { return { storage: null }; }),
                 req("GET", "/orgs/" + o.id + "/storage/usage").catch(function () { return null; }),
                 req("GET", "/orgs/" + o.id + "/activity").catch(function () { return null; }),
+                req("GET", "/orgs/" + o.id + "/members").catch(function () { return null; }),
               ]).then(function (rs) {
-                return mapOrg(o, (rs[0] && rs[0].repos) || [], tokens, rs[1] && rs[1].storage, rs[2], rs[3], user);
+                return mapOrg(o, (rs[0] && rs[0].repos) || [], tokens, rs[1] && rs[1].storage, rs[2], rs[3], rs[4], user);
               });
             }));
           }).then(function (orgsArr) {
@@ -153,5 +176,10 @@
     createOrg: function (name) { return req("POST", "/orgs", { name: name }); },
     createRepo: function (orgId, name) { return req("POST", "/orgs/" + orgId + "/repos", { name: name }); },
     createToken: function (name, scopes) { return req("POST", "/tokens", { name: name, scopes: (scopes || []).join(",") }); },
+    invite: function (orgId, email, role) { return req("POST", "/orgs/" + orgId + "/invites", { email: email, role: (role || "member").toLowerCase() }); },
+    revokeInvite: function (orgId, inviteId) { return req("DELETE", "/orgs/" + orgId + "/invites/" + inviteId); },
+    setRole: function (orgId, userId, role) { return req("POST", "/orgs/" + orgId + "/members/" + userId + "/role", { role: (role || "member").toLowerCase() }); },
+    removeMember: function (orgId, userId) { return req("DELETE", "/orgs/" + orgId + "/members/" + userId); },
+    acceptInvite: function (token) { return req("POST", "/orgs/accept-invite", { token: token }); },
   };
 })();
