@@ -119,6 +119,13 @@ export async function usage(
   env: Env,
   orgId: string,
 ): Promise<{ connected: boolean; totalBytes: number; objects: number; byRepo: Array<{ repo: string; bytes: number }>; truncated?: boolean }> {
+  // Listing a large bucket is several S3 calls, so cache the result briefly.
+  const cacheKey = `usage:${orgId}`;
+  const cachedRaw = await env.SESSIONS.get(cacheKey);
+  if (cachedRaw) {
+    try { return JSON.parse(cachedRaw); } catch { /* recompute below */ }
+  }
+
   const row = await env.DB.prepare("SELECT * FROM org_storage WHERE org_id = ?")
     .bind(orgId)
     .first<OrgStorageRow>();
@@ -166,9 +173,9 @@ export async function usage(
     const next = xml.match(/<NextContinuationToken>([^<]+)<\/NextContinuationToken>/);
     token = next ? next[1] : undefined;
     pages++;
-  } while (token && pages < 5);
+  } while (token && pages < 60);
 
-  return {
+  const result = {
     connected: true,
     totalBytes: total,
     objects: count,
@@ -177,6 +184,9 @@ export async function usage(
       .sort((a, b) => b.bytes - a.bytes),
     truncated: !!token,
   };
+  // Cache for 60s so dashboard loads aren't re-listing the bucket every time.
+  await env.SESSIONS.put(cacheKey, JSON.stringify(result), { expirationTtl: 60 });
+  return result;
 }
 
 // Sharded key layout under the prefix: <prefix>/ab/cd/abcd...

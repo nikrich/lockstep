@@ -110,6 +110,8 @@ app.put("/:orgId/storage", async (c) => {
       cfg.accessKeyId, cipher, now(), now())
     .run();
 
+  await c.env.SESSIONS.delete(`usage:${orgId}`); // bust the usage cache
+
   return c.json({ ok: true, storage: maskedStorage(b) });
 });
 
