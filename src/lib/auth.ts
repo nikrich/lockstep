@@ -100,10 +100,17 @@ export function requireAuth(): MiddlewareHandler<{ Bindings: Env; Variables: Var
   return async (c, next) => {
     const id = (await identityFromToken(c)) ?? (await identityFromSession(c));
     if (!id) {
-      return c.json({ message: "authentication required" }, 401, {
-        // Prompt git's credential helper to supply a PAT.
-        "WWW-Authenticate": 'Basic realm="Lockstep"',
-      });
+      // Only challenge non-browser clients (git/CLI) with Basic — so git's
+      // credential helper supplies a PAT. Browsers send an Origin / Sec-Fetch
+      // header; for them we must NOT send WWW-Authenticate, or the browser pops
+      // its native Basic-auth dialog instead of letting the dashboard show its
+      // own sign-in screen.
+      const isBrowser = !!(c.req.header("origin") || c.req.header("sec-fetch-mode"));
+      return c.json(
+        { message: "authentication required" },
+        401,
+        isBrowser ? {} : { "WWW-Authenticate": 'Basic realm="Lockstep"' },
+      );
     }
     c.set("identity", id);
     await next();
