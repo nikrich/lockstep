@@ -76,11 +76,11 @@
     return Object.assign({ connected: true, provider: s.provider || "r2", endpoint: s.endpoint || "", region: s.region || "auto", bucket: s.bucket || "", accessKeyId: s.accessKeyId || "", secret: "••••••••", prefix: s.prefix || "" }, stats);
   }
   function mapActivity(activityData, user) {
-    var ICON = { org: "building-2", storage: "database", repo: "box", token: "key-round", lock: "lock", push: "git-commit-horizontal" };
-    var TINT = { org: "var(--status-synced)", storage: "var(--amber-400)", repo: "var(--status-mine)", token: "var(--status-pending)", lock: "var(--status-locked)", push: "var(--status-synced)" };
-    var who = (user && user.name) || "You";
+    var ICON = { org: "building-2", storage: "database", repo: "box", token: "key-round", lock: "lock", unlock: "lock-open", force_unlock: "shield-alert", push: "git-commit-horizontal" };
+    var TINT = { org: "var(--status-synced)", storage: "var(--amber-400)", repo: "var(--status-mine)", token: "var(--status-pending)", lock: "var(--status-locked)", unlock: "var(--status-synced)", force_unlock: "var(--status-locked)", push: "var(--status-synced)" };
+    var fallbackWho = (user && user.name) || "You";
     return ((activityData && activityData.activity) || []).map(function (e) {
-      return { who: who, what: e.what, when: timeAgo(e.when), icon: ICON[e.kind] || "activity", tint: TINT[e.kind] || "var(--text-muted)" };
+      return { who: e.who || fallbackWho, what: e.what, when: timeAgo(e.when), icon: ICON[e.kind] || "activity", tint: TINT[e.kind] || "var(--text-muted)" };
     });
   }
   function mapOrg(o, repos, tokens, storage, usageData, activityData, user) {

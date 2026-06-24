@@ -9,6 +9,7 @@ import type { Env, Vars } from "../lib/types";
 import { requireAuth } from "../lib/auth";
 import { authorizeRepo } from "../lib/access";
 import { resolveStorage, presign, exists } from "../lib/storage";
+import { recordPush } from "../lib/events";
 
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 
@@ -66,6 +67,16 @@ app.post("/objects/batch", async (c) => {
       };
     }),
   );
+
+  // Log the push as activity (debounced across the burst of batch calls). Only
+  // objects we handed an upload URL for are genuinely new bytes being pushed.
+  if (op === "upload") {
+    const fresh = objects.filter((o) => "actions" in o && (o as { actions?: { upload?: unknown } }).actions?.upload);
+    if (fresh.length) {
+      const bytes = fresh.reduce((n, o) => n + (o.size || 0), 0);
+      await recordPush(c.env, repo, c.get("identity"), fresh.length, bytes);
+    }
+  }
 
   return c.json({ transfer: "basic", objects, hash_algo: "sha256" }, 200, {
     "Content-Type": "application/vnd.git-lfs+json",

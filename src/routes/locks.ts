@@ -12,10 +12,13 @@ import type { Env, Lock, Vars } from "../lib/types";
 import { requireAuth } from "../lib/auth";
 import { uuid } from "../lib/crypto";
 import { authorizeRepo } from "../lib/access";
+import { logEvent } from "../lib/events";
 
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 
 app.use("*", requireAuth());
+
+const base = (p: string) => p.split("/").pop() || p;
 
 const toJSON = (l: Lock) => ({
   id: l.id,
@@ -69,6 +72,12 @@ app.post("/", async (c) => {
       .first<Lock>();
     return c.json({ lock: winner ? toJSON(winner) : undefined, message: "already locked" }, 409);
   }
+  if (repo.org_id) {
+    await logEvent(c.env, {
+      orgId: repo.org_id, repoId: repo.id, actorId: id.userId, actorName: id.name,
+      kind: "lock", detail: `locked ${base(lock.path)} in ${repo.slug}`,
+    });
+  }
   return c.json({ lock: toJSON(lock) }, 201);
 });
 
@@ -114,7 +123,8 @@ app.post("/:id/unlock", async (c) => {
   if (!az.ok) return c.json({ message: az.message }, az.status);
   const repo = az.value.repo;
   const role = az.value.role;
-  const me = c.get("identity").userId;
+  const id = c.get("identity");
+  const me = id.userId;
   const lockId = c.req.param("id");
 
   const body = await c.req
@@ -136,6 +146,16 @@ app.post("/:id/unlock", async (c) => {
     }
   }
   await c.env.DB.prepare("DELETE FROM locks WHERE id = ?").bind(lockId).run();
+  if (repo.org_id) {
+    const forced = lock.owner_id !== me;
+    await logEvent(c.env, {
+      orgId: repo.org_id, repoId: repo.id, actorId: me, actorName: id.name,
+      kind: forced ? "force_unlock" : "unlock",
+      detail: forced
+        ? `force-unlocked ${base(lock.path)} (held by ${lock.owner_name}) in ${repo.slug}`
+        : `unlocked ${base(lock.path)} in ${repo.slug}`,
+    });
+  }
   return c.json({ lock: toJSON(lock) });
 });
 
