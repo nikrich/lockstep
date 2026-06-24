@@ -126,7 +126,7 @@ export async function testConnection(cfg: {
 export async function usage(
   env: Env,
   orgId: string,
-): Promise<{ connected: boolean; totalBytes: number; objects: number; byRepo: Array<{ repo: string; bytes: number }>; truncated?: boolean }> {
+): Promise<{ connected: boolean; totalBytes: number; objects: number; byRepo: Array<{ repo: string; bytes: number; objects: number }>; truncated?: boolean }> {
   // Listing a large bucket is several S3 calls, so cache the result briefly.
   const cacheKey = `usage:${orgId}`;
   const cachedRaw = await env.SESSIONS.get(cacheKey);
@@ -153,7 +153,7 @@ export async function usage(
   let total = 0;
   let count = 0;
   let pages = 0;
-  const byRepo: Record<string, number> = {};
+  const byRepo: Record<string, { bytes: number; objects: number }> = {};
   const contents = /<Contents>[\s\S]*?<Key>([^<]+)<\/Key>[\s\S]*?<Size>(\d+)<\/Size>[\s\S]*?<\/Contents>/g;
 
   do {
@@ -175,7 +175,9 @@ export async function usage(
       count++;
       const rest = prefix && key.startsWith(prefix) ? key.slice(prefix.length) : key;
       const repo = rest.split("/")[0] || "(root)";
-      byRepo[repo] = (byRepo[repo] || 0) + size;
+      const agg = (byRepo[repo] = byRepo[repo] || { bytes: 0, objects: 0 });
+      agg.bytes += size;
+      agg.objects += 1;
     }
     contents.lastIndex = 0;
     const next = xml.match(/<NextContinuationToken>([^<]+)<\/NextContinuationToken>/);
@@ -188,7 +190,7 @@ export async function usage(
     totalBytes: total,
     objects: count,
     byRepo: Object.entries(byRepo)
-      .map(([repo, bytes]) => ({ repo, bytes }))
+      .map(([repo, v]) => ({ repo, bytes: v.bytes, objects: v.objects }))
       .sort((a, b) => b.bytes - a.bytes),
     truncated: !!token,
   };

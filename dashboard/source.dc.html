@@ -877,8 +877,8 @@ class Component extends DCLogic {
     const org = this.org();
     const r = org.repos.find(x => x.slug === this.state.repoOpen);
     const { Card, Button, Avatar, Badge, StatBlock } = this.D;
-    const cloneUrl = 'https://api.lockstepcloud.com/' + org.slug + '/' + r.slug;
-    const lfs = '[lfs]\n  url = "' + cloneUrl + '/info/lfs"\n[lock]\n  enforce = true   # Perforce-grade exclusive locks';
+    const lfsUrl = 'https://api.lockstepcloud.com/' + r.slug;
+    const lfs = '[lfs]\n  url = "' + lfsUrl + '"';
     const copyBtn = (text) => h('button', { onClick: () => { try { navigator.clipboard && navigator.clipboard.writeText(text); } catch (e) {} this.flash('Copied to clipboard', 'mine'); },
       onMouseEnter: e => e.currentTarget.style.color = 'var(--text-strong)', onMouseLeave: e => e.currentTarget.style.color = 'var(--text-muted)',
       style: { display: 'inline-flex', alignItems: 'center', gap: 6, height: 28, padding: '0 9px', border: '1px solid var(--border-default)', background: 'var(--surface-raised)', borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)', cursor: 'pointer', font: '500 11.5px/1 Sora, sans-serif' } }, h(Icon, { n: 'copy', s: 13 }), 'Copy');
@@ -896,9 +896,10 @@ class Component extends DCLogic {
         h(StatBlock, { label: 'Active locks', value: r.locks, accent: r.locks > 0, hint: r.lockList.filter(l => l.stale).length + ' stale' }),
         h(StatBlock, { label: 'Last activity', value: r.activity === 'never' ? '\u2014' : r.activity.split(' ')[0], unit: r.activity === 'never' ? null : r.activity.split(' ').slice(1).join(' '), hint: r.branch })),
       h(Card, { pad: 'lg', style: { marginBottom: 14 } },
-        this.sectionLabel('Clone & configure'),
-        codeBlock('Clone the repo', 'git clone ' + cloneUrl + '.git'),
-        codeBlock('.lfsconfig \u2014 point LFS + locks at Lockstep', lfs)),
+        this.sectionLabel('Use Lockstep for assets'),
+        h('div', { style: { font: '400 12px/1.5 Sora, sans-serif', color: 'var(--text-muted)', margin: '-4px 0 12px' } }, 'Your code stays in your own git host (GitHub, etc.). Commit this .lfsconfig so big binaries stream to your bucket via Lockstep:'),
+        codeBlock('.lfsconfig', lfs),
+        codeBlock('Install + commit', 'git lfs install\ngit add .lfsconfig && git commit -m "Use Lockstep for LFS"')),
       h(Card, { pad: 'none', style: { marginBottom: 14 } },
         h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--hairline)' } },
           h('span', { style: { font: '600 14px/1 Sora, sans-serif', color: 'var(--text-strong)' } }, 'Lock overview'),

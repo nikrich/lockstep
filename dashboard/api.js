@@ -55,8 +55,9 @@
   }
   var ROLE = { owner: "Owner", admin: "Admin", member: "Member" };
 
-  function mapRepo(r, bytes) {
-    return { name: r.slug, slug: r.slug, sizeGB: Math.round((bytes || 0) / 1e9), blobs: 0, locks: 0, activity: timeAgo(r.created_at), branch: "main", lockList: [] };
+  function mapRepo(r, stats) {
+    stats = stats || {};
+    return { name: r.slug, slug: r.slug, sizeGB: Math.round((stats.bytes || 0) / 1e9), blobs: stats.objects || 0, locks: 0, activity: timeAgo(r.created_at), branch: "main", lockList: [] };
   }
   function mapToken(t) {
     return {
@@ -75,8 +76,8 @@
     return Object.assign({ connected: true, provider: s.provider || "r2", endpoint: s.endpoint || "", region: s.region || "auto", bucket: s.bucket || "", accessKeyId: s.accessKeyId || "", secret: "••••••••", prefix: s.prefix || "" }, stats);
   }
   function mapOrg(o, repos, tokens, storage, usageData, user) {
-    var bytesByRepo = {};
-    ((usageData && usageData.byRepo) || []).forEach(function (br) { bytesByRepo[br.repo] = br.bytes; });
+    var statsByRepo = {};
+    ((usageData && usageData.byRepo) || []).forEach(function (br) { statsByRepo[br.repo] = br; });
     return {
       id: o.id, name: o.name, slug: o.slug,
       role: ROLE[o.role] || "Member",
@@ -85,7 +86,7 @@
       storage: mapStorage(storage, usageData),
       members: [{ name: (user && user.name) || "You", email: (user && user.email) || "you@local.dev", role: ROLE[o.role] || "Owner", you: true }],
       invites: [],
-      repos: repos.map(function (r) { return mapRepo(r, bytesByRepo[r.slug]); }),
+      repos: repos.map(function (r) { return mapRepo(r, statsByRepo[r.slug]); }),
       tokens: tokens.map(mapToken),
       invoices: [],
       activity: [],

@@ -9,6 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import crypto from "node:crypto";
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const [, , dcPath, supPath, bundlePath] = process.argv;
@@ -36,11 +37,18 @@ dc = dc.replace(
 
 // Wiring patches. Each must hit exactly one known anchor in the design source;
 // a missed anchor throws so we never ship a silently-unwired build.
+// Cache-bust api.js by content hash so dashboard updates aren't served stale.
+const apiHash = crypto
+  .createHash("md5")
+  .update(fs.readFileSync(path.join(dir, "api.js")))
+  .digest("hex")
+  .slice(0, 8);
+
 const patches = [
-  // load api.js before the runtime boots
+  // load api.js (content-hashed) before the runtime boots
   [
     '<script src="./support.js"></script>',
-    '<script src="api.js"></script>\n<script src="./support.js"></script>',
+    `<script src="api.js?v=${apiHash}"></script>\n<script src="./support.js"></script>`,
   ],
   // once the design system is ready, replace mock orgs with live data
   [
