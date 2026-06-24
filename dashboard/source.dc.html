@@ -3,7 +3,6 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<script src="api.js"></script>
 <script src="./support.js"></script>
 </head>
 <body>
@@ -11,7 +10,7 @@
 <helmet>
 <link rel="stylesheet" href="lockstep/styles.css" />
 <script src="https://unpkg.com/lucide@0.544.0/dist/umd/lucide.min.js"></script>
-<script src="ds-bundle.js"></script>
+<script src="_ds/lockstep-design-system-e35539b8-9fcc-4b48-8dc4-699e6afb024a/_ds_bundle.js"></script>
 <style>
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;height:100%;}
@@ -181,7 +180,7 @@ class Component extends DCLogic {
   componentDidMount() {
     const tick = () => {
       const ns = window.LockstepDesignSystem_e35539;
-      if (ns && ns.Button && window.lucide) { this.D = ns; this.setState({ ready: true }); (function(self){var b=function(){if(window.LSAPI){window.LSAPI.bootstrap(self);}else{setTimeout(b,150);}};b();})(this); }
+      if (ns && ns.Button && window.lucide) { this.D = ns; this.setState({ ready: true }); }
       else setTimeout(tick, 40);
     };
     tick();
@@ -226,7 +225,7 @@ class Component extends DCLogic {
     const d = this.state.draft;
     this.patchOrg(o => ({ storage: { ...o.storage, ...d, connected: true, storedGB: o.storage.storedGB || 0, blobs: o.storage.blobs || 0 } }));
     this.setState({ storageEditing: false, testState: 'idle' });
-    this.flash('Storage connected · bucket ' + d.bucket, 'synced'); if (window.LSAPI) window.LSAPI.saveStorage(this.state.orgId, d).catch(e => this.flash('Storage save failed: ' + e.message, 'conflict'));
+    this.flash('Storage connected · bucket ' + d.bucket, 'synced');
   }
 
   renderVals() {
@@ -971,7 +970,7 @@ class Component extends DCLogic {
         h(Button, { variant: 'primary', disabled: !slug, iconLeft: h(Icon, { n: 'box', s: 15 }), onClick: () => {
           this.patchOrg(o => ({ repos: [{ name: name.trim(), slug, sizeGB: 0, blobs: 0, locks: 0, activity: 'just now', branch: 'main', lockList: [] }, ...o.repos] }));
           this.setState({ confirm: null, newOrgName: '', repoOpen: slug });
-          this.flash('Repository ' + name.trim() + ' created', 'mine'); if (window.LSAPI) window.LSAPI.createRepo(this.state.orgId, name.trim()).catch(e => this.flash('Create failed: ' + e.message, 'conflict'));
+          this.flash('Repository ' + name.trim() + ' created', 'mine');
         } }, 'Create repository'))
     ]);
   }
@@ -1033,7 +1032,7 @@ class Component extends DCLogic {
     const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     this.patchOrg(o => ({ tokens: [{ name: m.name.trim(), last4: m.last4, scopes, created: today, used: 'never' }, ...o.tokens] }));
     this.setState({ tokenModal: null });
-    this.flash('Token saved to ' + this.org().name, 'synced'); if (window.LSAPI) window.LSAPI.createToken(m.name.trim(), scopes).catch(e => this.flash('Token save failed: ' + e.message, 'conflict'));
+    this.flash('Token saved to ' + this.org().name, 'synced');
   }
 }
 </script>

@@ -4,12 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "wrangler dev --port 8787 --local",
+    "dev:dashboard": "wrangler pages dev dashboard --port 8788 --ip 127.0.0.1",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "migrate:local": "wrangler d1 migrations apply lockstep --local",
-    "migrate:remote": "wrangler d1 migrations apply lockstep --remote"
+    "migrate:remote": "wrangler d1 migrations apply lockstep --remote",
+    "seed:local": "wrangler d1 execute lockstep --local --file scripts/seed-local.sql",
+    "dashboard:build": "node dashboard/assemble.mjs"
   },
   "dependencies": {
     "aws4fetch": "^1.0.20",

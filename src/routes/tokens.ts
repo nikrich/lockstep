@@ -25,17 +25,26 @@ app.get("/", async (c) => {
 app.post("/", async (c) => {
   const { userId } = c.get("identity");
   const body = await c.req
-    .json<{ name?: string; expires_at?: number }>()
-    .catch(() => ({}) as { name?: string; expires_at?: number });
+    .json<{ name?: string; scopes?: string; expires_at?: number }>()
+    .catch(() => ({}) as { name?: string; scopes?: string; expires_at?: number });
   const name = body.name?.trim() || "token";
+
+  // Whitelist scopes; default to read+write+lock if none given.
+  const allowed = ["lock", "read", "write"];
+  const scopes =
+    (body.scopes ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => allowed.includes(s))
+      .join(",") || "read,write,lock";
 
   const { secret, hash } = await newToken();
   const id = uuid();
   await c.env.DB.prepare(
     `INSERT INTO tokens (id, user_id, name, token_hash, scopes, created_at, expires_at)
-     VALUES (?, ?, ?, ?, 'repo', ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
   )
-    .bind(id, userId, name, hash, Math.floor(Date.now() / 1000), body.expires_at ?? null)
+    .bind(id, userId, name, hash, scopes, Math.floor(Date.now() / 1000), body.expires_at ?? null)
     .run();
 
   return c.json(
