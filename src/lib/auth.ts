@@ -32,8 +32,8 @@ export function sessionCookie(value: string): string {
 
 export const clearSessionCookie = `${SESSION_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`;
 
-async function identityFromSession(c: Ctx): Promise<Identity | null> {
-  const raw = getCookie(c.req.raw.headers.get("Cookie"), SESSION_COOKIE);
+/** Validate a signed session value (`sid.sig`) and resolve the user. */
+async function identityFromSessionValue(c: Ctx, raw: string | null): Promise<Identity | null> {
   if (!raw) return null;
   const [sid, sig] = raw.split(".");
   if (!sid || !sig) return null;
@@ -47,6 +47,25 @@ async function identityFromSession(c: Ctx): Promise<Identity | null> {
     .first<User>();
   if (!user) return null;
   return { userId, name: ownerName(user), via: "session" };
+}
+
+/** Session from the cookie (same-origin browsers / git). */
+function identityFromSession(c: Ctx): Promise<Identity | null> {
+  return identityFromSessionValue(c, getCookie(c.req.raw.headers.get("Cookie"), SESSION_COOKIE));
+}
+
+/**
+ * Session from an `Authorization: Bearer <sid.sig>` header. The SPA stores the
+ * session token in localStorage and sends it this way, sidestepping the
+ * fragility of cross-subdomain cookies. PATs (`lsk_`) are handled separately;
+ * anything else containing a "." is treated as a session token.
+ */
+function identityFromSessionHeader(c: Ctx): Promise<Identity | null> {
+  const authz = c.req.header("authorization") || "";
+  if (!authz.startsWith("Bearer ")) return Promise.resolve(null);
+  const v = authz.slice(7).trim();
+  if (!v || v.startsWith("lsk_") || v.indexOf(".") === -1) return Promise.resolve(null);
+  return identityFromSessionValue(c, v);
 }
 
 // --- Personal Access Tokens (machines) ---
@@ -98,7 +117,10 @@ async function identityFromToken(c: Ctx): Promise<Identity | null> {
 /** Require auth; 401 if neither a valid PAT nor session is present. */
 export function requireAuth(): MiddlewareHandler<{ Bindings: Env; Variables: Vars }> {
   return async (c, next) => {
-    const id = (await identityFromToken(c)) ?? (await identityFromSession(c));
+    const id =
+      (await identityFromToken(c)) ??
+      (await identityFromSessionHeader(c)) ??
+      (await identityFromSession(c));
     if (!id) {
       // Only challenge non-browser clients (git/CLI) with Basic — so git's
       // credential helper supplies a PAT. Browsers send an Origin / Sec-Fetch

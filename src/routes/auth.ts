@@ -55,9 +55,13 @@ app.get("/:provider/callback", async (c) => {
   const user = await upsertUser(c.env, provider, profile);
   const cookie = await createSession(c.env, user.id);
 
-  // Land back on the dashboard app (different origin from this API).
+  // Land back on the dashboard with the session token in the URL fragment (not
+  // sent to servers). The SPA stores it and sends it as a Bearer header — robust
+  // against cross-subdomain cookie blocking. The cookie is also set as a
+  // same-origin fallback.
+  const dash = (c.env.DASHBOARD_URL || "/").replace(/\/$/, "");
   return c.body(null, 302, {
-    Location: c.env.DASHBOARD_URL || "/",
+    Location: dash + "/#s=" + encodeURIComponent(cookie),
     "Set-Cookie": sessionCookie(cookie),
   });
 });

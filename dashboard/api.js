@@ -12,9 +12,20 @@
   var forceOAuth = isLocal && localStorage.getItem("ls_oauth") === "1";
   var DEV_TOKEN = isLocal && !forceOAuth ? "lsk_dev_local_0001" : null;
 
+  // Capture a session token handed back by the OAuth callback (URL fragment),
+  // store it, and clean the URL. The SPA then authenticates with a Bearer header
+  // instead of a cross-subdomain cookie (which browsers routinely drop).
+  if (location.hash && location.hash.indexOf("s=") !== -1) {
+    var hm = location.hash.match(/s=([^&]+)/);
+    if (hm) localStorage.setItem("ls_session_token", decodeURIComponent(hm[1]));
+    history.replaceState(null, "", location.pathname + location.search);
+  }
+  var SESSION_TOKEN = localStorage.getItem("ls_session_token");
+
   function headers(extra) {
     var h = extra || {};
     if (DEV_TOKEN) h["Authorization"] = "Bearer " + DEV_TOKEN;
+    else if (SESSION_TOKEN) h["Authorization"] = "Bearer " + SESSION_TOKEN;
     return h;
   }
   function req(method, path, body) {
@@ -119,7 +130,7 @@
     // Start an OAuth login (top-level navigation to the API).
     authStart: function (provider) { window.location.href = API + "/auth/" + provider; },
     me: function () { return req("GET", "/auth/me"); },
-    logout: function () { return req("POST", "/auth/logout").catch(function () {}); },
+    logout: function () { localStorage.removeItem("ls_session_token"); return req("POST", "/auth/logout").catch(function () {}); },
 
     saveStorage: function (orgId, d) {
       return req("PUT", "/orgs/" + orgId + "/storage", {
