@@ -56,17 +56,20 @@
       used: t.last_used_at ? timeAgo(t.last_used_at) : "never",
     };
   }
-  function mapStorage(s) {
-    if (!s) return { connected: false, provider: "r2", endpoint: "", region: "auto", bucket: "", accessKeyId: "", secret: "", prefix: "", storedGB: 0, blobs: 0 };
-    return { connected: true, provider: s.provider || "r2", endpoint: s.endpoint || "", region: s.region || "auto", bucket: s.bucket || "", accessKeyId: s.accessKeyId || "", secret: "••••••••", prefix: s.prefix || "", storedGB: 0, blobs: 0 };
+  function mapStorage(s, usageData) {
+    var u = usageData || {};
+    var bytes = u.totalBytes || 0;
+    var stats = { storedBytes: bytes, storedGB: Math.round((bytes / 1e9) * 100) / 100, blobs: u.objects || 0, byRepo: u.byRepo || [] };
+    if (!s) return Object.assign({ connected: false, provider: "r2", endpoint: "", region: "auto", bucket: "", accessKeyId: "", secret: "", prefix: "" }, stats);
+    return Object.assign({ connected: true, provider: s.provider || "r2", endpoint: s.endpoint || "", region: s.region || "auto", bucket: s.bucket || "", accessKeyId: s.accessKeyId || "", secret: "••••••••", prefix: s.prefix || "" }, stats);
   }
-  function mapOrg(o, repos, tokens, storage, user) {
+  function mapOrg(o, repos, tokens, storage, usageData, user) {
     return {
       id: o.id, name: o.name, slug: o.slug,
       role: ROLE[o.role] || "Member",
       plan: o.plan === "free" ? "Indie" : (o.plan || "Studio"),
       seatPrice: 12, seatsTotal: o.seats || 1,
-      storage: mapStorage(storage),
+      storage: mapStorage(storage, usageData),
       members: [{ name: (user && user.name) || "You", email: (user && user.email) || "you@local.dev", role: ROLE[o.role] || "Owner", you: true }],
       invites: [],
       repos: repos.map(mapRepo),
@@ -95,8 +98,9 @@
               return Promise.all([
                 req("GET", "/orgs/" + o.id + "/repos").catch(function () { return { repos: [] }; }),
                 req("GET", "/orgs/" + o.id + "/storage").catch(function () { return { storage: null }; }),
+                req("GET", "/orgs/" + o.id + "/storage/usage").catch(function () { return null; }),
               ]).then(function (rs) {
-                return mapOrg(o, (rs[0] && rs[0].repos) || [], tokens, rs[1] && rs[1].storage, user);
+                return mapOrg(o, (rs[0] && rs[0].repos) || [], tokens, rs[1] && rs[1].storage, rs[2], user);
               });
             }));
           }).then(function (orgsArr) {

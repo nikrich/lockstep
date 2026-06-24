@@ -710,10 +710,10 @@ class Component extends DCLogic {
     const row = (label, value, mono = true) => h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '11px 0', borderBottom: '1px solid var(--hairline)' } },
       h('span', { style: { font: '500 12.5px/1 Sora, sans-serif', color: 'var(--text-muted)', flex: 'none' } }, label),
       h('span', { style: { font: (mono ? '500 13px/1.3 "Spline Sans Mono", monospace' : '500 13px/1.3 Sora, sans-serif'), color: 'var(--text-body)', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, value));
-    const folders = [
-      { p: '/Content/Maps', gb: 48 }, { p: '/Content/Characters', gb: 28 }, { p: '/Content/FX', gb: 14 }, { p: '/Content/Audio', gb: 9 }, { p: '/other', gb: 5 },
-    ];
-    const maxF = Math.max(...folders.map(f => f.gb));
+    const folders = (st.byRepo || []).map(r => ({ p: r.repo, gb: r.bytes / 1e9 }));
+    const maxF = folders.length ? Math.max(...folders.map(f => f.gb)) : 1;
+    const rate = ({ r2: 0.015, b2: 0.006, wasabi: 0.0068, s3: 0.023, minio: 0 })[st.provider] || 0.015;
+    const estDisp = '$' + (() => { const m = (st.storedBytes || 0) / 1e9 * rate; return m < 1 ? m.toFixed(2) : m.toFixed(0); })();
 
     return this.pageWrap([
       this.pageHead('Storage', 'Connected and healthy. Config is read-only \u2014 rotate keys when you need to.',
@@ -747,15 +747,16 @@ class Component extends DCLogic {
                 h(Icon, { n: 'check', s: 15, color: 'var(--status-synced)', style: { marginTop: 1, flex: 'none' } }),
                 h('div', null, h('div', { style: { font: '600 12.5px/1.3 Sora, sans-serif', color: 'var(--text-body)' } }, t), h('div', { style: { font: '400 11.5px/1.4 Sora, sans-serif', color: 'var(--text-muted)' } }, s))))),
           h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } },
-            h(StatBlock, { label: 'Est. storage', value: '$6', unit: '/mo', accent: true, hint: st.storedGB + ' GB at-rest' }),
+            h(StatBlock, { label: 'Est. storage', value: estDisp, unit: '/mo', accent: true, hint: st.storedGB + ' GB at-rest' }),
             h(StatBlock, { label: 'Egress billed', value: '$0', hint: 'bytes skip the server' })))),
       h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 14, alignItems: 'start' } },
         h(Card, { pad: 'lg' },
-          h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 16 } }, this.sectionLabel('Usage by folder'), h('span', { style: { font: '600 13px/1 "Spline Sans Mono", monospace', color: 'var(--text-strong)' } }, st.storedGB + ' GB')),
+          h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 16 } }, this.sectionLabel('Usage by repository'), h('span', { style: { font: '600 13px/1 "Spline Sans Mono", monospace', color: 'var(--text-strong)' } }, st.storedGB + ' GB')),
+          (folders.length === 0) && h('div', { style: { padding: '18px 4px 6px', font: '400 13px/1.5 Sora, sans-serif', color: 'var(--text-muted)' } }, 'No assets yet — push a commit and usage appears here.'),
           folders.map((f, i) => h('div', { key: i, style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 11 } },
             h('span', { style: { width: 140, flex: 'none', font: '500 12px/1 "Spline Sans Mono", monospace', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis' } }, f.p),
             h('div', { style: { flex: 1, height: 18, background: 'var(--surface-sunken)', borderRadius: 5, overflow: 'hidden' } }, h('div', { style: { width: (f.gb / maxF * 100) + '%', height: '100%', background: i === 0 ? 'var(--amber-400)' : 'color-mix(in srgb, var(--status-mine) ' + (70 - i * 8) + '%, var(--surface-raised))', borderRadius: 5 } })),
-            h('span', { style: { width: 48, flex: 'none', textAlign: 'right', font: '600 12px/1 "Spline Sans Mono", monospace', color: 'var(--text-body)' } }, f.gb + ' GB')))),
+            h('span', { style: { width: 56, flex: 'none', textAlign: 'right', font: '600 12px/1 "Spline Sans Mono", monospace', color: 'var(--text-body)' } }, (f.gb >= 10 ? f.gb.toFixed(0) : f.gb.toFixed(2)) + ' GB')))),
         h(Card, { pad: 'lg' },
           this.sectionLabel('Cost vs hosted Git LFS'),
           h('div', { style: { font: '400 11.5px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)', marginTop: -6, marginBottom: 16 } }, '100 GB game \u00b7 active team \u00b7 per month'),

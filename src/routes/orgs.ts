@@ -7,7 +7,7 @@ import { Hono } from "hono";
 import type { Env, Vars } from "../lib/types";
 import { requireAuth } from "../lib/auth";
 import { uuid, aesEncrypt } from "../lib/crypto";
-import { testConnection } from "../lib/storage";
+import { testConnection, usage } from "../lib/storage";
 import { orgRole } from "../lib/access";
 
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
@@ -111,6 +111,14 @@ app.put("/:orgId/storage", async (c) => {
     .run();
 
   return c.json({ ok: true, storage: maskedStorage(b) });
+});
+
+// Real usage read from the bucket (total bytes, object count, per-repo).
+app.get("/:orgId/storage/usage", async (c) => {
+  const { userId } = c.get("identity");
+  const orgId = c.req.param("orgId");
+  if (!(await orgRole(c.env, orgId, userId))) return c.json({ message: "not a member" }, 403);
+  return c.json(await usage(c.env, orgId));
 });
 
 // Return the org's storage config WITHOUT the secret.

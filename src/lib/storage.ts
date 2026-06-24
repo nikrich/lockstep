@@ -108,6 +108,77 @@ export async function testConnection(cfg: {
   }
 }
 
+/**
+ * Real storage usage for an org, read from its bucket: total bytes, object
+ * count, and bytes-per-repo (the first path segment under the org prefix).
+ * Note: blobs are content-addressed (sha256), so logical asset folders are not
+ * recoverable here — only totals and per-repo aggregates are real. Capped at
+ * 5 pages (~5000 objects) to bound cost; `truncated` flags when it stops early.
+ */
+export async function usage(
+  env: Env,
+  orgId: string,
+): Promise<{ connected: boolean; totalBytes: number; objects: number; byRepo: Array<{ repo: string; bytes: number }>; truncated?: boolean }> {
+  const row = await env.DB.prepare("SELECT * FROM org_storage WHERE org_id = ?")
+    .bind(orgId)
+    .first<OrgStorageRow>();
+  if (!row) return { connected: false, totalBytes: 0, objects: 0, byRepo: [] };
+
+  const secret = await aesDecrypt(env.LOCKSTEP_MASTER_KEY, row.secret_cipher);
+  const client = new AwsClient({
+    accessKeyId: row.access_key_id,
+    secretAccessKey: secret,
+    service: "s3",
+    region: row.region || "auto",
+  });
+  const base = row.endpoint.replace(/\/$/, "");
+  const prefix = row.prefix ? row.prefix.replace(/\/$/, "") + "/" : "";
+
+  let token: string | undefined;
+  let total = 0;
+  let count = 0;
+  let pages = 0;
+  const byRepo: Record<string, number> = {};
+  const contents = /<Contents>[\s\S]*?<Key>([^<]+)<\/Key>[\s\S]*?<Size>(\d+)<\/Size>[\s\S]*?<\/Contents>/g;
+
+  do {
+    const u = new URL(`${base}/${row.bucket}`);
+    u.searchParams.set("list-type", "2");
+    if (prefix) u.searchParams.set("prefix", prefix);
+    u.searchParams.set("max-keys", "1000");
+    if (token) u.searchParams.set("continuation-token", token);
+
+    const res = await client.fetch(u.toString(), { method: "GET" });
+    if (!res.ok) break;
+    const xml = await res.text();
+
+    let m: RegExpExecArray | null;
+    while ((m = contents.exec(xml)) !== null) {
+      const key = m[1] ?? "";
+      const size = parseInt(m[2] ?? "0", 10) || 0;
+      total += size;
+      count++;
+      const rest = prefix && key.startsWith(prefix) ? key.slice(prefix.length) : key;
+      const repo = rest.split("/")[0] || "(root)";
+      byRepo[repo] = (byRepo[repo] || 0) + size;
+    }
+    contents.lastIndex = 0;
+    const next = xml.match(/<NextContinuationToken>([^<]+)<\/NextContinuationToken>/);
+    token = next ? next[1] : undefined;
+    pages++;
+  } while (token && pages < 5);
+
+  return {
+    connected: true,
+    totalBytes: total,
+    objects: count,
+    byRepo: Object.entries(byRepo)
+      .map(([repo, bytes]) => ({ repo, bytes }))
+      .sort((a, b) => b.bytes - a.bytes),
+    truncated: !!token,
+  };
+}
+
 // Sharded key layout under the prefix: <prefix>/ab/cd/abcd...
 function keyFor(prefix: string, oid: string): string {
   const shard = oid.length >= 4 ? `${oid.slice(0, 2)}/${oid.slice(2, 4)}/${oid}` : oid;
