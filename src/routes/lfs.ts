@@ -8,7 +8,7 @@ import { Hono } from "hono";
 import type { Env, Vars } from "../lib/types";
 import { requireAuth } from "../lib/auth";
 import { authorizeRepo } from "../lib/access";
-import { resolveStorage, presign } from "../lib/storage";
+import { resolveStorage, presign, exists } from "../lib/storage";
 
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 
@@ -36,14 +36,27 @@ app.post("/objects/batch", async (c) => {
 
   const objects = await Promise.all(
     (body.objects ?? []).map(async (o) => {
-      if (op === "upload" || op === "download") {
-        const method = op === "upload" ? "PUT" : "GET";
-        const href = await presign(storage, o.oid, method, PRESIGN_TTL);
+      if (op === "upload") {
+        // Skip objects already in the bucket so re-runs/resumes are cheap and
+        // idempotent (no upload action -> git-lfs treats it as done).
+        if (await exists(storage, o.oid)) {
+          return { oid: o.oid, size: o.size, authenticated: true };
+        }
+        const href = await presign(storage, o.oid, "PUT", PRESIGN_TTL);
         return {
           oid: o.oid,
           size: o.size,
           authenticated: true,
-          actions: { [op]: { href, expires_in: PRESIGN_TTL } },
+          actions: { upload: { href, expires_in: PRESIGN_TTL } },
+        };
+      }
+      if (op === "download") {
+        const href = await presign(storage, o.oid, "GET", PRESIGN_TTL);
+        return {
+          oid: o.oid,
+          size: o.size,
+          authenticated: true,
+          actions: { download: { href, expires_in: PRESIGN_TTL } },
         };
       }
       return {

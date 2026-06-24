@@ -80,6 +80,14 @@ export async function presign(
   return signed.url;
 }
 
+/** Whether a blob already exists in the bucket (so uploads can be skipped). */
+export async function exists(s: ResolvedStorage, oid: string): Promise<boolean> {
+  const res = await s.client.fetch(`${s.base}/${s.bucket}/${keyFor(s.prefix, oid)}`, {
+    method: "HEAD",
+  });
+  return res.ok;
+}
+
 /**
  * Validate credentials by attempting to list one object. Returns null on
  * success, or an error message — used by the "test connection" step before we
