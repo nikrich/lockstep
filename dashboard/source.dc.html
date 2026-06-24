@@ -262,7 +262,7 @@ class Component extends DCLogic {
   // ================= AUTH =================
   signin() {
     const oauth = (label, icon, primary) => h('button', {
-      onClick: () => { this.setState({ route: 'app', nav: 'home' }); this.flash('Signed in as you@auroragames.dev', 'mine'); },
+      onClick: () => { const p = icon === 'github' ? 'github' : 'google'; if (window.LSAPI) window.LSAPI.authStart(p); else this.setState({ route: 'app', nav: 'home' }); },
       onMouseEnter: e => { e.currentTarget.style.borderColor = 'var(--border-strong)'; e.currentTarget.style.background = primary ? 'var(--brand-hover)' : 'var(--surface-hover)'; },
       onMouseLeave: e => { e.currentTarget.style.borderColor = primary ? 'transparent' : 'var(--border-default)'; e.currentTarget.style.background = primary ? 'var(--brand)' : 'var(--surface-card)'; },
       style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, height: 46, width: '100%', borderRadius: 'var(--radius-md)', cursor: 'pointer', font: '600 14px/1 Sora, sans-serif', border: '1px solid ' + (primary ? 'transparent' : 'var(--border-default)'), background: primary ? 'var(--brand)' : 'var(--surface-card)', color: primary ? 'var(--brand-contrast)' : 'var(--text-body)', boxShadow: primary ? 'var(--glow-amber)' : 'var(--shadow-edge)', transition: 'all var(--dur-fast) var(--ease-out)' },
@@ -369,20 +369,23 @@ class Component extends DCLogic {
 
   userButton() {
     const { Avatar } = this.D;
+    const u = this.state.user || {};
+    const nm = u.name || 'You';
+    const em = u.email || 'you@auroragames.dev';
     return h('div', { style: { position: 'relative' } },
       h('button', { onClick: () => this.setState(s => ({ userMenuOpen: !s.userMenuOpen, orgMenuOpen: false })), style: { display: 'flex', alignItems: 'center', gap: 6, height: 38, padding: '0 4px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 'var(--radius-pill)' } },
-        h(Avatar, { name: 'You Me', size: 30, ring: this.state.userMenuOpen })),
+        h(Avatar, { name: nm, size: 30, ring: this.state.userMenuOpen })),
       this.state.userMenuOpen && this.dropdown(248, [
         h('div', { key: 'u', style: { display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px 12px', borderBottom: '1px solid var(--hairline)', marginBottom: 6 } },
-          h(Avatar, { name: 'You Me', size: 34 }),
+          h(Avatar, { name: nm, size: 34 }),
           h('div', { style: { minWidth: 0 } },
-            h('div', { style: { font: '600 13px/1.2 Sora, sans-serif', color: 'var(--text-strong)' } }, 'You'),
-            h('div', { style: { font: '500 11px/1.2 "Spline Sans Mono", monospace', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis' } }, 'you@auroragames.dev'))),
+            h('div', { style: { font: '600 13px/1.2 Sora, sans-serif', color: 'var(--text-strong)' } }, nm),
+            h('div', { style: { font: '500 11px/1.2 "Spline Sans Mono", monospace', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis' } }, em))),
         this.menuItem('user', 'Your profile', () => { this.go('settings'); }),
         this.menuItem('settings', 'Org settings', () => { this.go('settings'); }),
         this.menuItem(this.state.theme === 'dark' ? 'sun' : 'moon', this.state.theme === 'dark' ? 'Light theme' : 'Dark theme', () => this.setState(s => ({ theme: s.theme === 'dark' ? 'light' : 'dark', userMenuOpen: false }))),
         h('div', { key: 'd', style: { height: 1, background: 'var(--hairline)', margin: '6px 0' } }),
-        this.menuItem('log-out', 'Sign out', () => this.setState({ route: 'signin', userMenuOpen: false }), 'var(--status-conflict)'),
+        this.menuItem('log-out', 'Sign out', () => { this.setState({ userMenuOpen: false }); if (window.LSAPI) window.LSAPI.logout().finally(() => this.setState({ route: 'signin' })); else this.setState({ route: 'signin' }); }, 'var(--status-conflict)'),
       ], 'right'));
   }
 
@@ -424,7 +427,7 @@ class Component extends DCLogic {
       { icon: this.state.theme === 'dark' ? 'sun' : 'moon', label: 'Toggle theme', kind: 'Action', run: () => this.setState(s => ({ cmdOpen: false, theme: s.theme === 'dark' ? 'light' : 'dark' })) },
       { icon: 'book-open', label: 'Open documentation', kind: 'Help', run: () => { this.setState({ cmdOpen: false }); window.open('https://github.com/nikrich/lockstep#readme', '_blank'); } },
       { icon: 'life-buoy', label: 'Contact support', kind: 'Help', run: () => this.setState({ cmdOpen: false, helpOpen: true }) },
-      { icon: 'log-out', label: 'Sign out', kind: 'Account', run: () => this.setState({ cmdOpen: false, route: 'signin' }) },
+      { icon: 'log-out', label: 'Sign out', kind: 'Account', run: () => { this.setState({ cmdOpen: false }); if (window.LSAPI) window.LSAPI.logout().finally(() => this.setState({ route: 'signin' })); else this.setState({ route: 'signin' }); } },
     ];
   }
   cmdPalette() {

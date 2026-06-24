@@ -5,7 +5,12 @@
 (function () {
   var isLocal = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
   var API = isLocal ? "http://127.0.0.1:8787" : "https://api.lockstepcloud.com";
-  var DEV_TOKEN = isLocal ? "lsk_dev_local_0001" : null;
+  // Locally we auto-auth with the seeded dev PAT for convenience. Visit
+  // http://localhost:8788/?oauth to disable it and test the real OAuth flow
+  // (clears with localStorage.removeItem('ls_oauth')).
+  if (isLocal && location.search.indexOf("oauth") !== -1) localStorage.setItem("ls_oauth", "1");
+  var forceOAuth = isLocal && localStorage.getItem("ls_oauth") === "1";
+  var DEV_TOKEN = isLocal && !forceOAuth ? "lsk_dev_local_0001" : null;
 
   function headers(extra) {
     var h = extra || {};
@@ -55,14 +60,14 @@
     if (!s) return { connected: false, provider: "r2", endpoint: "", region: "auto", bucket: "", accessKeyId: "", secret: "", prefix: "", storedGB: 0, blobs: 0 };
     return { connected: true, provider: s.provider || "r2", endpoint: s.endpoint || "", region: s.region || "auto", bucket: s.bucket || "", accessKeyId: s.accessKeyId || "", secret: "••••••••", prefix: s.prefix || "", storedGB: 0, blobs: 0 };
   }
-  function mapOrg(o, repos, tokens, storage) {
+  function mapOrg(o, repos, tokens, storage, user) {
     return {
       id: o.id, name: o.name, slug: o.slug,
       role: ROLE[o.role] || "Member",
       plan: o.plan === "free" ? "Indie" : (o.plan || "Studio"),
       seatPrice: 12, seatsTotal: o.seats || 1,
       storage: mapStorage(storage),
-      members: [{ name: "You", email: "you@local.dev", role: ROLE[o.role] || "Owner", you: true }],
+      members: [{ name: (user && user.name) || "You", email: (user && user.email) || "you@local.dev", role: ROLE[o.role] || "Owner", you: true }],
       invites: [],
       repos: repos.map(mapRepo),
       tokens: tokens.map(mapToken),
@@ -76,29 +81,41 @@
     isLocal: isLocal,
     api: API,
 
-    // Replace the prototype's mock orgs with real data from the API.
+    // Determine auth via /auth/me, then replace the prototype's mock orgs with
+    // real data. No session (prod) -> show the sign-in screen.
     bootstrap: function (comp) {
-      req("GET", "/orgs").then(function (res) {
-        var list = (res && res.orgs) || [];
-        if (!list.length) { console.warn("[LSAPI] no orgs for this user"); return; }
-        return req("GET", "/tokens").catch(function () { return { tokens: [] }; }).then(function (tk) {
-          var tokens = (tk && tk.tokens) || [];
-          return Promise.all(list.map(function (o) {
-            return Promise.all([
-              req("GET", "/orgs/" + o.id + "/repos").catch(function () { return { repos: [] }; }),
-              req("GET", "/orgs/" + o.id + "/storage").catch(function () { return { storage: null }; }),
-            ]).then(function (rs) {
-              return mapOrg(o, (rs[0] && rs[0].repos) || [], tokens, rs[1] && rs[1].storage);
-            });
-          }));
-        }).then(function (orgsArr) {
-          var orgs = {};
-          orgsArr.forEach(function (o) { orgs[o.id] = o; });
-          comp.setState({ orgs: orgs, orgId: orgsArr[0].id });
-          console.log("[LSAPI] loaded " + orgsArr.length + " org(s) from " + API);
+      req("GET", "/auth/me").then(function (meRes) {
+        var user = (meRes && meRes.user) || null;
+        return req("GET", "/orgs").then(function (res) {
+          var list = (res && res.orgs) || [];
+          if (!list.length) { comp.setState({ route: "createorg", user: user }); return; }
+          return req("GET", "/tokens").catch(function () { return { tokens: [] }; }).then(function (tk) {
+            var tokens = (tk && tk.tokens) || [];
+            return Promise.all(list.map(function (o) {
+              return Promise.all([
+                req("GET", "/orgs/" + o.id + "/repos").catch(function () { return { repos: [] }; }),
+                req("GET", "/orgs/" + o.id + "/storage").catch(function () { return { storage: null }; }),
+              ]).then(function (rs) {
+                return mapOrg(o, (rs[0] && rs[0].repos) || [], tokens, rs[1] && rs[1].storage, user);
+              });
+            }));
+          }).then(function (orgsArr) {
+            var orgs = {};
+            orgsArr.forEach(function (o) { orgs[o.id] = o; });
+            comp.setState({ orgs: orgs, orgId: orgsArr[0].id, route: "app", user: user });
+            console.log("[LSAPI] signed in as " + (user && (user.email || user.name) || "?") + " · " + orgsArr.length + " org(s)");
+          });
         });
-      }).catch(function (e) { console.error("[LSAPI] bootstrap failed", e); });
+      }).catch(function (e) {
+        console.warn("[LSAPI] not authenticated → sign in (" + (e && e.message) + ")");
+        comp.setState({ route: "signin" });
+      });
     },
+
+    // Start an OAuth login (top-level navigation to the API).
+    authStart: function (provider) { window.location.href = API + "/auth/" + provider; },
+    me: function () { return req("GET", "/auth/me"); },
+    logout: function () { return req("POST", "/auth/logout").catch(function () {}); },
 
     saveStorage: function (orgId, d) {
       return req("PUT", "/orgs/" + orgId + "/storage", {

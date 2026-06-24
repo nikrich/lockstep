@@ -29,6 +29,7 @@ bucket_name = "lockstep-blobs"              # `wrangler r2 bucket create lockste
 [vars]
 # Public base URL of the deployed Worker (used to build OAuth redirect URIs).
 BASE_URL = "https://api.lockstepcloud.com"
+DASHBOARD_URL = "https://app.lockstepcloud.com"
 
 # Secrets (set via `wrangler secret put <NAME>`, never commit):
 #   GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET

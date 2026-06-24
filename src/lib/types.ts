@@ -7,7 +7,8 @@ export interface Env {
   BLOBS: R2Bucket;
 
   // Vars
-  BASE_URL: string;
+  BASE_URL: string; // this API's public origin (for OAuth redirect URIs)
+  DASHBOARD_URL: string; // the dashboard app's origin (post-login redirect)
 
   // Secrets
   GITHUB_CLIENT_ID: string;

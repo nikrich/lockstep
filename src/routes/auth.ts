@@ -2,7 +2,7 @@
 import { Hono } from "hono";
 import type { Env, Vars } from "../lib/types";
 import { authorizeUrl, exchange, upsertUser, type Provider } from "../lib/oauth";
-import { createSession, sessionCookie, clearSessionCookie } from "../lib/auth";
+import { createSession, sessionCookie, clearSessionCookie, requireAuth } from "../lib/auth";
 import { randomId } from "../lib/crypto";
 
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
@@ -12,6 +12,18 @@ const OAUTH_STATE_TTL = 600; // seconds
 function isProvider(p: string): p is Provider {
   return p === "github" || p === "google";
 }
+
+// Current signed-in user (session cookie or PAT). Registered before /:provider
+// so the static path wins. The dashboard calls this to know who's logged in.
+app.get("/me", requireAuth(), async (c) => {
+  const id = c.get("identity");
+  const user = await c.env.DB.prepare(
+    "SELECT id, email, name, provider, avatar_url FROM users WHERE id = ?",
+  )
+    .bind(id.userId)
+    .first();
+  return c.json({ user, via: id.via });
+});
 
 // Kick off login: stash a CSRF state token in KV, redirect to the provider.
 app.get("/:provider", async (c) => {
@@ -43,14 +55,17 @@ app.get("/:provider/callback", async (c) => {
   const user = await upsertUser(c.env, provider, profile);
   const cookie = await createSession(c.env, user.id);
 
+  // Land back on the dashboard app (different origin from this API).
   return c.body(null, 302, {
-    Location: "/dashboard",
+    Location: c.env.DASHBOARD_URL || "/",
     "Set-Cookie": sessionCookie(cookie),
   });
 });
 
+// Called via fetch from the dashboard; clears the session and returns JSON so
+// the client can redirect itself.
 app.post("/logout", (c) =>
-  c.body(null, 302, { Location: "/", "Set-Cookie": clearSessionCookie }),
+  c.json({ ok: true }, 200, { "Set-Cookie": clearSessionCookie }),
 );
 
 export default app;
