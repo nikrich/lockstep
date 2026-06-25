@@ -2,6 +2,7 @@
 
 #include "LockstepGit.h"
 #include "LockstepSourceControlState.h"
+#include "LockstepCredentials.h"
 #include "HAL/PlatformProcess.h"
 #include "HAL/FileManager.h"
 #include "Misc/Paths.h"
@@ -238,17 +239,31 @@ namespace LockstepGit
 
 	FString ResolveAccessToken(const FString& GitBinary, const FString& RepoRoot, const FString& ServerUrl)
 	{
-		// 1) Explicit env var wins (CI / power users).
+		// 1) Explicit env var wins (CI / power users / overrides).
 		FString FromEnv = FPlatformMisc::GetEnvironmentVariable(TEXT("LOCKSTEP_TOKEN"));
 		if (!FromEnv.IsEmpty())
 		{
 			return FromEnv.TrimStartAndEnd();
 		}
 
-		// 2) TODO: query the git credential helper (`git credential fill`) for the
-		//    server host, the same store git-lfs already populated. That needs a
-		//    piped-stdin child process; tracked as a follow-up. For now, settings
-		//    panel / env var supply the token.
+		// 2) The token stored by the in-editor browser sign-in (OS credential
+		//    store), keyed by the API host derived from the server URL.
+		FString Host = ServerUrl;
+		const int32 SchemeEnd = Host.Find(TEXT("://"));
+		if (SchemeEnd != INDEX_NONE)
+		{
+			Host.MidInline(SchemeEnd + 3);
+		}
+		int32 Slash = INDEX_NONE;
+		if (Host.FindChar(TEXT('/'), Slash))
+		{
+			Host.LeftInline(Slash);
+		}
+		FString Stored;
+		if (!Host.IsEmpty() && LockstepCredentials::Load(Host, Stored))
+		{
+			return Stored.TrimStartAndEnd();
+		}
 		return FString();
 	}
 }

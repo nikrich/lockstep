@@ -2,12 +2,14 @@
 
 #include "SLockstepSourceControlSettings.h"
 #include "LockstepSourceControlModule.h"
+#include "LockstepAuth.h"
+#include "LockstepCredentials.h"
 
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/Input/SEditableTextBox.h"
 #include "Widgets/Input/SCheckBox.h"
-#include "Widgets/Layout/SBox.h"
+#include "Widgets/Input/SButton.h"
 #include "Internationalization/Internationalization.h"
 
 #define LOCTEXT_NAMESPACE "LockstepSourceControlSettings"
@@ -15,6 +17,7 @@
 void SLockstepSourceControlSettings::Construct(const FArguments& InArgs)
 {
 	const float Pad = 4.0f;
+	RefreshAuthStatus();
 
 	ChildSlot
 	[
@@ -67,12 +70,39 @@ void SLockstepSourceControlSettings::Construct(const FArguments& InArgs)
 			]
 		]
 
-		// Token hint
-		+ SVerticalBox::Slot().AutoHeight().Padding(Pad)
+		// --- Account ---
+		+ SVerticalBox::Slot().AutoHeight().Padding(Pad, 12, Pad, 2)
+		[
+			SNew(STextBlock)
+			.Text(this, &SLockstepSourceControlSettings::GetAuthStatusText)
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(Pad, 2)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 8, 0)
+			[
+				SNew(SButton)
+				.IsEnabled(this, &SLockstepSourceControlSettings::IsSignInEnabled)
+				.OnClicked(this, &SLockstepSourceControlSettings::OnSignInClicked)
+				[
+					SNew(STextBlock).Text(LOCTEXT("SignIn", "Sign in to Lockstep"))
+				]
+			]
+			+ SHorizontalBox::Slot().AutoWidth()
+			[
+				SNew(SButton)
+				.IsEnabled(this, &SLockstepSourceControlSettings::IsSignedIn)
+				.OnClicked(this, &SLockstepSourceControlSettings::OnSignOutClicked)
+				[
+					SNew(STextBlock).Text(LOCTEXT("SignOut", "Sign out"))
+				]
+			]
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(Pad, 2)
 		[
 			SNew(STextBlock)
 			.AutoWrapText(true)
-			.Text(LOCTEXT("TokenHint", "Access token: set the LOCKSTEP_TOKEN environment variable to your lsk_… Personal Access Token (minted in the Lockstep dashboard). The token is never stored in project settings."))
+			.Text(LOCTEXT("AuthHint", "Sign in opens your browser to authorize this machine. The access token is stored securely in the OS credential manager — never in project settings. (CI can still set the LOCKSTEP_TOKEN env var to override.)"))
 		]
 	];
 }
@@ -87,6 +117,7 @@ void SLockstepSourceControlSettings::OnServerUrlCommitted(const FText& InText, E
 	FLockstepSourceControlModule& Module = FLockstepSourceControlModule::Get();
 	Module.AccessSettings().SetServerUrl(InText.ToString().TrimStartAndEnd());
 	Module.SaveSettings();
+	RefreshAuthStatus(); // host may have changed
 }
 
 FText SLockstepSourceControlSettings::GetGitBinaryPath() const
@@ -112,6 +143,70 @@ void SLockstepSourceControlSettings::OnSoftLockChanged(ECheckBoxState NewState)
 	FLockstepSourceControlModule& Module = FLockstepSourceControlModule::Get();
 	Module.AccessSettings().SetSoftLockMode(NewState == ECheckBoxState::Checked);
 	Module.SaveSettings();
+}
+
+bool SLockstepSourceControlSettings::IsSignedIn() const
+{
+	const FString Host = FLockstepSourceControlModule::Get().AccessSettings().GetApiHost();
+	return !Host.IsEmpty() && LockstepCredentials::Has(Host);
+}
+
+bool SLockstepSourceControlSettings::IsSignInEnabled() const
+{
+	return !FLockstepAuth::Get().IsBusy()
+		&& !FLockstepSourceControlModule::Get().AccessSettings().GetApiOrigin().IsEmpty();
+}
+
+void SLockstepSourceControlSettings::RefreshAuthStatus()
+{
+	if (FLockstepAuth::Get().IsBusy())
+	{
+		AuthStatus = LOCTEXT("AuthBusy", "Waiting for browser sign-in…");
+	}
+	else if (IsSignedIn())
+	{
+		const FString Host = FLockstepSourceControlModule::Get().AccessSettings().GetApiHost();
+		AuthStatus = FText::Format(LOCTEXT("AuthYes", "Signed in to {0}"), FText::FromString(Host));
+	}
+	else
+	{
+		AuthStatus = LOCTEXT("AuthNo", "Not signed in.");
+	}
+}
+
+FReply SLockstepSourceControlSettings::OnSignInClicked()
+{
+	FLockstepSourceControlModule& Module = FLockstepSourceControlModule::Get();
+	const FString Origin = Module.AccessSettings().GetApiOrigin();
+	const FString Host = Module.AccessSettings().GetApiHost();
+	AuthStatus = LOCTEXT("AuthBusy", "Waiting for browser sign-in…");
+	FLockstepAuth::Get().BeginLogin(
+		Origin, Host,
+		FLockstepLoginComplete::CreateSP(this, &SLockstepSourceControlSettings::OnLoginComplete));
+	return FReply::Handled();
+}
+
+FReply SLockstepSourceControlSettings::OnSignOutClicked()
+{
+	const FString Host = FLockstepSourceControlModule::Get().AccessSettings().GetApiHost();
+	if (!Host.IsEmpty())
+	{
+		LockstepCredentials::Delete(Host);
+	}
+	RefreshAuthStatus();
+	return FReply::Handled();
+}
+
+void SLockstepSourceControlSettings::OnLoginComplete(bool bSuccess, FString Message)
+{
+	if (bSuccess)
+	{
+		RefreshAuthStatus(); // canonical "Signed in to <host>"
+	}
+	else
+	{
+		AuthStatus = FText::Format(LOCTEXT("AuthFail", "Sign-in failed: {0}"), FText::FromString(Message));
+	}
 }
 
 #undef LOCTEXT_NAMESPACE

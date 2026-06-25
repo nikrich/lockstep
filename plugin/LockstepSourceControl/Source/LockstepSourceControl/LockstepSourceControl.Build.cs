@@ -15,6 +15,7 @@ public class LockstepSourceControl : ModuleRules
 				"DesktopWidgets",
 				"SourceControl",  // ISourceControlProvider, FMessageLog, progress, helpers
 				"HTTP",           // direct client to the Lockstep lock API
+				"HTTPServer",     // loopback listener for browser sign-in
 				"Json",           // parse the lock API responses
 			}
 		);
@@ -24,6 +25,12 @@ public class LockstepSourceControl : ModuleRules
 			PrivateDependencyModuleNames.Add("CoreUObject");
 			PrivateDependencyModuleNames.Add("EditorFramework");
 			PrivateDependencyModuleNames.Add("UnrealEd");
+		}
+
+		// Windows Credential Manager (DPAPI-backed) for secure token storage.
+		if (Target.Platform == UnrealTargetPlatform.Win64)
+		{
+			PublicSystemLibraries.Add("Advapi32.lib");
 		}
 	}
 }

@@ -28,6 +28,13 @@ public:
 	/** Repo slug captured by the server (last path segment of ServerUrl). */
 	FString GetRepoSlug() const;
 
+	/** Scheme+host of the API, e.g. "https://api.lockstepcloud.com" (no path).
+	 *  The auth endpoints live here, not under the per-repo ServerUrl. */
+	FString GetApiOrigin() const;
+
+	/** Host only, e.g. "api.lockstepcloud.com" — the credential-store key. */
+	FString GetApiHost() const;
+
 	/** Root of the git working copy that contains the UE project. */
 	FString GetWorkingCopyRoot() const;
 	void SetWorkingCopyRoot(const FString& InRoot);

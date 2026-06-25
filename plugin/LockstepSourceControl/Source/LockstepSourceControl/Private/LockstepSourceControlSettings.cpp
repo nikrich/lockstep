@@ -62,6 +62,26 @@ FString FLockstepSourceControlSettings::GetRepoSlug() const
 	return Slug;
 }
 
+FString FLockstepSourceControlSettings::GetApiOrigin() const
+{
+	FScopeLock Lock(&CriticalSection);
+	// "https://api.lockstepcloud.com/the-club" -> "https://api.lockstepcloud.com"
+	int32 SchemeEnd = ServerUrl.Find(TEXT("://"));
+	if (SchemeEnd == INDEX_NONE)
+	{
+		return FString();
+	}
+	int32 PathStart = ServerUrl.Find(TEXT("/"), ESearchCase::IgnoreCase, ESearchDir::FromStart, SchemeEnd + 3);
+	return PathStart == INDEX_NONE ? ServerUrl : ServerUrl.Left(PathStart);
+}
+
+FString FLockstepSourceControlSettings::GetApiHost() const
+{
+	const FString Origin = GetApiOrigin();
+	int32 SchemeEnd = Origin.Find(TEXT("://"));
+	return SchemeEnd == INDEX_NONE ? Origin : Origin.Mid(SchemeEnd + 3);
+}
+
 FString FLockstepSourceControlSettings::GetWorkingCopyRoot() const
 {
 	FScopeLock Lock(&CriticalSection);

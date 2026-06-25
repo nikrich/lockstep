@@ -1,7 +1,7 @@
 {
 	"FileVersion": 3,
-	"Version": 1,
-	"VersionName": "0.1.0",
+	"Version": 2,
+	"VersionName": "0.2.0",
 	"FriendlyName": "Lockstep Source Control",
 	"Description": "Git + Git-LFS source control with Perforce-grade, engine-native file locking for Unreal. Streams binary assets to your own bucket via the Lockstep coordination server; enforces exclusive checkout for unmergeable assets in-editor.",
 	"Category": "Source Control",
