@@ -1,0 +1,24 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.1.0",
+	"FriendlyName": "Lockstep Source Control",
+	"Description": "Git + Git-LFS source control with Perforce-grade, engine-native file locking for Unreal. Streams binary assets to your own bucket via the Lockstep coordination server; enforces exclusive checkout for unmergeable assets in-editor.",
+	"Category": "Source Control",
+	"CreatedBy": "Lockstep",
+	"CreatedByURL": "https://lockstepcloud.com",
+	"DocsURL": "https://github.com/nikrich/lockstep",
+	"MarketplaceURL": "",
+	"SupportURL": "https://github.com/nikrich/lockstep/issues",
+	"CanContainContent": false,
+	"IsBetaVersion": true,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "LockstepSourceControl",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		}
+	]
+}
