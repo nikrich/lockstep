@@ -14,6 +14,8 @@
 #include "ScopedSourceControlProgress.h"
 #include "Misc/Paths.h"
 #include "Misc/QueuedThreadPool.h"
+#include "HttpModule.h"
+#include "HttpManager.h"
 
 #define LOCTEXT_NAMESPACE "LockstepSourceControl"
 
@@ -304,6 +306,12 @@ ECommandResult::Type FLockstepSourceControlProvider::ExecuteSynchronousCommand(F
 		IssueCommand(InCommand);
 		while (!InCommand.bExecuteProcessed)
 		{
+			// The command runs on a worker thread; its lock-API HTTP completes via
+			// FHttpManager::Tick on THIS (game) thread. We're not in the normal
+			// engine tick here, so pump the HTTP manager ourselves or a worker
+			// blocked on an HTTP response would never wake. (git subprocesses are
+			// unaffected, but our lock client uses HTTP.)
+			FHttpModule::Get().GetHttpManager().Tick(0.0f);
 			Tick();
 			Progress.Tick();
 			FPlatformProcess::Sleep(0.01f);

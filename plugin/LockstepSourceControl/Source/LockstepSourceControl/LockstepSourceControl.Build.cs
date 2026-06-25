@@ -6,51 +6,24 @@ public class LockstepSourceControl : ModuleRules
 {
 	public LockstepSourceControl(ReadOnlyTargetRules Target) : base(Target)
 	{
-		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
-
-		PublicDependencyModuleNames.AddRange(new string[]
-		{
-			"Core",
-		});
-
-		PrivateDependencyModuleNames.AddRange(new string[]
-		{
-			"CoreUObject",
-			"Engine",
-			"InputCore",
-			"Slate",
-			"SlateCore",
-			"Projects",        // IPluginManager — locate our plugin's resources
-			"SourceControl",   // ISourceControlProvider / module
-			"HTTP",            // talk to the Lockstep lock API
-			"Json",
-			"JsonUtilities",
-		});
-
-		// Editor-only UI helpers. Module names shifted across UE5: "EditorStyle"
-		// was folded into ToolWidgets/EditorWidgets around 5.1. Depend on what the
-		// target engine actually ships so the plugin builds on every 5.x.
-		if (Target.bBuildEditor)
-		{
-			PrivateDependencyModuleNames.AddRange(new string[]
-			{
-				"UnrealEd",
+		PrivateDependencyModuleNames.AddRange(
+			new string[] {
+				"Core",
+				"Slate",
+				"SlateCore",
+				"InputCore",
 				"DesktopWidgets",
-				"DesktopPlatform",
-			});
-
-			bool bHasToolWidgets =
-				(Target.Version.MajorVersion > 5) ||
-				(Target.Version.MajorVersion == 5 && Target.Version.MinorVersion >= 1);
-
-			if (bHasToolWidgets)
-			{
-				PrivateDependencyModuleNames.Add("ToolWidgets");
+				"SourceControl",  // ISourceControlProvider, FMessageLog, progress, helpers
+				"HTTP",           // direct client to the Lockstep lock API
+				"Json",           // parse the lock API responses
 			}
-			else
-			{
-				PrivateDependencyModuleNames.Add("EditorStyle");
-			}
+		);
+
+		if (Target.bBuildEditor == true)
+		{
+			PrivateDependencyModuleNames.Add("CoreUObject");
+			PrivateDependencyModuleNames.Add("EditorFramework");
+			PrivateDependencyModuleNames.Add("UnrealEd");
 		}
 	}
 }

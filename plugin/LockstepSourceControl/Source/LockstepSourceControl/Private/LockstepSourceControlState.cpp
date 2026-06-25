@@ -5,18 +5,20 @@
 #define LOCTEXT_NAMESPACE "LockstepSourceControl.State"
 
 #if SOURCE_CONTROL_WITH_SLATE
-#include "Styling/AppStyle.h"
+#include "RevisionControlStyle/RevisionControlStyle.h"
 
 FSlateIcon FLockstepSourceControlState::GetIcon() const
 {
+	const FName StyleSet = FRevisionControlStyleManager::GetStyleSetName();
+
 	// The lock badge is the headline UX. A file someone else holds reads as
-	// "locked by other"; one we hold reads as "checked out by us".
+	// "checked out by other"; one we hold reads as "checked out by us".
 	switch (LockState)
 	{
 	case ELockstepLockState::LockedByOther:
-		return FSlateIcon(FAppStyle::GetAppStyleSetName(), "RevisionControl.CheckedOutByOtherUser");
+		return FSlateIcon(StyleSet, "RevisionControl.CheckedOutByOtherUser");
 	case ELockstepLockState::LockedByMe:
-		return FSlateIcon(FAppStyle::GetAppStyleSetName(), "RevisionControl.CheckedOut");
+		return FSlateIcon(StyleSet, "RevisionControl.CheckedOut");
 	default:
 		break;
 	}
@@ -24,13 +26,13 @@ FSlateIcon FLockstepSourceControlState::GetIcon() const
 	switch (WorkingState)
 	{
 	case ELockstepWorkingState::Modified:
-		return FSlateIcon(FAppStyle::GetAppStyleSetName(), "RevisionControl.CheckedOut");
+		return FSlateIcon(StyleSet, "RevisionControl.ModifiedLocally");
 	case ELockstepWorkingState::Added:
-		return FSlateIcon(FAppStyle::GetAppStyleSetName(), "RevisionControl.OpenForAdd");
+		return FSlateIcon(StyleSet, "RevisionControl.OpenForAdd");
 	case ELockstepWorkingState::Deleted:
-		return FSlateIcon(FAppStyle::GetAppStyleSetName(), "RevisionControl.MarkedForDelete");
+		return FSlateIcon(StyleSet, "RevisionControl.MarkedForDelete");
 	case ELockstepWorkingState::Untracked:
-		return FSlateIcon(FAppStyle::GetAppStyleSetName(), "RevisionControl.NotInDepot");
+		return FSlateIcon(StyleSet, "RevisionControl.NotInDepot");
 	default:
 		return FSlateIcon();
 	}

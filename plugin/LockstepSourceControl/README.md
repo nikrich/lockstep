@@ -11,17 +11,19 @@ coordination server.
   assets (`*.uasset`, `*.umap`, `*.fbx`, …) are **read-only in-editor** until you
   hold the lock, with a "🔒 locked by X" badge when someone else holds it.
 
-> Status: **Phase 2, in progress.** Foundation + lock client are implemented;
-> the provider/worker layer is being built (see [Roadmap](#roadmap-within-the-plugin)).
+> Status: **Phase 2, in progress.** The full provider/worker layer now exists
+> (connect, status, checkout→lock, checkin, revert→unlock, add, delete, sync)
+> and is written against the **UE 5.7** interface. Not yet compiled in-engine.
 
 ## Engine support
 
-Targets **all of UE5** (5.0 → 5.6+). The version-sensitive parts of
-`ISourceControlProvider` / `ISourceControlState` are gated behind
-`LOCKSTEP_UE_VERSION_AT_LEAST(major, minor)` (see `LockstepVersionCompat.h`).
-The interface's pure-virtual set genuinely drifts across these versions, so the
-**first compile against a given engine may surface signature drift to reconcile**
-— that is inherent to spanning seven versions, not a bug in the design.
+Primary target: **UE 5.7** — the provider and state classes are written against
+the exact `ISourceControlProvider` / `ISourceControlState` headers shipped with
+5.7 (modeled on the engine's own `GitSourceControl` plugin so the dispatch and
+threading model is the proven one). The version-sensitive parts are gated behind
+`LOCKSTEP_UE_VERSION_AT_LEAST(major, minor)` (see `LockstepVersionCompat.h`) so
+back-porting to earlier 5.x is mechanical; the interface's pure-virtual set does
+drift across versions, so each additional engine target needs a compile pass.
 
 ## How it fits the server
 
@@ -52,12 +54,13 @@ Source/LockstepSourceControl/
     LockstepSourceControlSettings.{h,cpp}Connection settings (ini-persisted)     [done]
     LockstepLockClient.{h,cpp}           Direct HTTP client for the lock API     [done]
     LockstepSourceControlState.{h,cpp}   Per-file state (lock badge + git status)[done]
-    LockstepSourceControlProvider.{h,cpp}ISourceControlProvider                  [next]
-    LockstepSourceControlCommand.{h,cpp} Async queued-work command               [next]
-    LockstepSourceControlWorkers.{h,cpp} Per-operation workers                   [next]
-    LockstepGit.{h,cpp}                  git/git-lfs CLI runner + status parse   [next]
-    LockstepSourceControlModule.{h,cpp}  Module: register the provider feature   [next]
-    SLockstepSourceControlSettings.{h,cpp}Slate settings panel                   [next]
+    LockstepSourceControlProvider.{h,cpp}ISourceControlProvider (5.7)            [done]
+    LockstepSourceControlCommand.{h,cpp} Async queued-work command               [done]
+    ILockstepSourceControlWorker.h       Worker interface                        [done]
+    LockstepSourceControlOperations.{h,cpp} Per-operation workers                [done]
+    LockstepGit.{h,cpp}                  git/git-lfs CLI runner + status parse   [done]
+    LockstepSourceControlModule.{h,cpp}  Module: register the provider feature   [done]
+    SLockstepSourceControlSettings.{h,cpp}Slate settings panel                   [done]
     LockstepSourceControlMenu.{h,cpp}    Toolbar: refresh locks / force-unlock   [later]
 ```
 
@@ -85,15 +88,20 @@ ever receives the resolved token string.
 - [x] Settings store
 - [x] Lock client (acquire / list / verify / release+force) — dual-threaded HTTP
 - [x] Per-file state object (lock badge, checkout/edit semantics)
-- [ ] `LockstepGit` — run git/git-lfs, parse `git status`/`lfs` into working state
-- [ ] Async command + worker dispatch (`IQueuedWork`)
-- [ ] Workers: `Connect`, `UpdateStatus`, `CheckOut`→lock, `CheckIn`,
+- [x] `LockstepGit` — run git/git-lfs, parse `git status`, detect `lockable`
+- [x] Async command + worker dispatch (`IQueuedWork`)
+- [x] Workers: `Connect`, `UpdateStatus`, `CheckOut`→lock, `CheckIn`,
       `MarkForAdd`, `Delete`, `Revert`→unlock, `Sync`
-- [ ] Provider wiring + module registration
-- [ ] Slate settings panel
+- [x] Provider wiring + module registration
+- [x] Slate settings panel
+- [x] Revision-control icons via `FRevisionControlStyleManager` (5.7 style set)
+- [ ] **Compile pass against UE 5.7** (not yet built in-engine)
+- [ ] `git credential fill` token resolution (env var works today)
+- [ ] CheckIn via temp commit-message file (avoid shell quoting)
 - [ ] Read-only enforcement on disk for lockable assets not held
 - [ ] **OFPA-aware** lock granularity (`__ExternalActors__` → per-actor locks)
-- [ ] Soft / advisory lock mode (warn, don't block)
+- [ ] Soft / advisory lock mode (warn, don't block) — setting exists, not enforced
+- [ ] Toolbar menu: refresh locks / admin force-unlock
 
 ## License
 

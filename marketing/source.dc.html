@@ -20,6 +20,12 @@
   input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none; width:20px; height:20px; border-radius:50%; background:#ffb224; cursor:pointer; border:3px solid #11161d; box-shadow:0 0 0 1px #36434f, 0 4px 12px rgba(255,178,36,0.35); }
   input[type=range]::-moz-range-thumb{ width:18px; height:18px; border-radius:50%; background:#ffb224; cursor:pointer; border:3px solid #11161d; box-shadow:0 0 0 1px #36434f; }
   @keyframes ls-pulse { 0%,100%{ opacity:0.5 } 50%{ opacity:1 } }
+  @media (max-width:880px){ .ls-nav a{ display:none !important; } }
+  @media (max-width:600px){
+    header, section, footer { padding-left:16px !important; padding-right:16px !important; }
+    section { padding-top:54px !important; padding-bottom:54px !important; }
+    .ls-gh-text { display:none !important; }
+  }
 </style>
 </helmet>
 <div style="background:#0a0d11; color:#dde4ec; font-family:'Sora',ui-sans-serif,system-ui,sans-serif; -webkit-font-smoothing:antialiased; min-height:100vh; overflow-x:hidden;">
@@ -29,14 +35,14 @@
       <svg width="30" height="30" viewBox="0 0 56 56" fill="none" aria-label="Lockstep"><rect x="8" y="8" width="40" height="40" rx="11" fill="#ffb224"></rect><circle cx="28" cy="24.5" r="6" fill="#1a1206"></circle><rect x="25" y="26.5" width="6" height="13" rx="3" fill="#1a1206"></rect></svg>
       <span style="font:700 19px/1 'Sora',sans-serif; letter-spacing:-0.02em; color:#eef2f6;">Lockstep</span>
     </a>
-    <nav style="flex:1; display:flex; gap:24px; margin-left:14px; flex-wrap:wrap;">
+    <nav class="ls-nav" style="flex:1; display:flex; gap:24px; margin-left:14px; flex-wrap:wrap;">
       <a href="#calculator" style="font:500 14px/1 'Sora',sans-serif; color:#bcc6d1; text-decoration:none;">Calculator</a>
       <a href="#how" style="font:500 14px/1 'Sora',sans-serif; color:#bcc6d1; text-decoration:none;">How it works</a>
       <a href="#locking" style="font:500 14px/1 'Sora',sans-serif; color:#bcc6d1; text-decoration:none;">Locking</a>
       <a href="#compare" style="font:500 14px/1 'Sora',sans-serif; color:#bcc6d1; text-decoration:none;">Compare</a>
       <a href="#pricing" style="font:500 14px/1 'Sora',sans-serif; color:#bcc6d1; text-decoration:none;">Pricing</a>
     </nav>
-    <a href="https://github.com/nikrich/lockstep" style="display:inline-flex; align-items:center; gap:7px; font:500 13px/1 'Sora',sans-serif; color:#bcc6d1; text-decoration:none;"><i data-lucide="github" style="width:16px;height:16px;"></i><span style="white-space:nowrap;">GitHub</span></a>
+    <a href="https://github.com/nikrich/lockstep" style="display:inline-flex; align-items:center; gap:7px; font:500 13px/1 'Sora',sans-serif; color:#bcc6d1; text-decoration:none;"><i data-lucide="github" style="width:16px;height:16px;"></i><span class="ls-gh-text" style="white-space:nowrap;">GitHub</span></a>
     <a href="https://app.lockstepcloud.com" style="font:500 14px/1 'Sora',sans-serif; color:#bcc6d1; text-decoration:none; white-space:nowrap;">Sign in</a>
     <a href="https://app.lockstepcloud.com" style="display:inline-flex; align-items:center; gap:7px; padding:9px 16px; border-radius:7px; background:#ffb224; color:#1a1206; font:600 14px/1 'Sora',sans-serif; text-decoration:none; box-shadow:0 6px 20px rgba(255,178,36,0.22); white-space:nowrap;">Coming soon</a>
   </header>
