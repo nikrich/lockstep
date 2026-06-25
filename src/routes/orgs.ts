@@ -385,8 +385,8 @@ async function ownerCount(env: Env, orgId: string): Promise<number> {
 
 // --- Billing (Polar, Merchant of Record) ---
 
-const SEAT_PRICE = 12;
-const FREE_SEATS = 5;
+const SEAT_PRICE = 3.99;
+const FREE_SEATS = 1;
 
 async function activeSeatCount(env: Env, orgId: string): Promise<number> {
   const row = await env.DB.prepare(
