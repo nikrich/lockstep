@@ -355,7 +355,7 @@ class Component extends DCLogic {
       h('div', { style: { height: 56, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', borderBottom: '1px solid var(--hairline)' } },
         h('img', { src: this.state.theme === 'light' ? 'lockstep/logo-wordmark-light.svg' : 'lockstep/logo-wordmark-dark.svg', height: 24 }),
         h('div', { style: { display: 'flex', gap: 8 } }, this.themeToggle(), this.iconBtn('log-out', () => this.setState({ route: 'signin' }), 'Sign out'))),
-      h('div', { style: { flex: 1, overflowY: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 } },
+      h('div', { style: { flex: 1, overflowY: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: this.narrow() ? '24px 16px' : 40 } },
         h('div', { style: { width: '100%', maxWidth: 460 } },
           h('div', { style: { width: 46, height: 46, borderRadius: 12, background: 'color-mix(in srgb, var(--amber-400) 16%, var(--surface-card))', border: '1px solid color-mix(in srgb, var(--amber-400) 30%, var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--amber-400)', marginBottom: 20 } }, h(Icon, { n: 'building-2', s: 22 })),
           h('div', { style: { font: '700 26px/1.2 Sora, sans-serif', letterSpacing: '-0.02em', color: 'var(--text-strong)' } }, 'Create your organization'),
