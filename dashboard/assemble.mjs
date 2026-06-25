@@ -69,12 +69,18 @@ const patches = [
   [
     `codeBlock('Install + commit', 'git lfs install\\ngit add .lfsconfig && git commit -m "Use Lockstep for LFS"')),`,
     `codeBlock('Install + commit', 'git lfs install\\ngit add .lfsconfig && git commit -m "Use Lockstep for LFS"'),
-        h(Button, { variant: 'secondary', size: 'sm', iconLeft: h(Icon, { n: 'download', s: 14 }), style: { marginTop: 12 }, onClick: () => window.open('https://github.com/nikrich/lockstep/releases/tag/ue-plugin-v0.2.0', '_blank') }, 'Download Unreal plugin')),`,
+        h(Button, { variant: 'secondary', size: 'sm', iconLeft: h(Icon, { n: 'download', s: 14 }), style: { marginTop: 12 }, onClick: () => window.open('https://github.com/nikrich/lockstep/releases/tag/ue-plugin-v0.2.0', '_blank') }, 'Download Unreal plugin'),
+        h(Button, { variant: 'ghost', size: 'sm', iconLeft: h(Icon, { n: 'book-open', s: 14 }), style: { marginTop: 8 }, onClick: () => window.open('https://lockstepcloud.com/docs', '_blank') }, 'Full setup guide')),`,
+  ],
+  // point the Docs & support "Documentation" link at the hosted setup guide
+  [
+    "window.open('https://github.com/nikrich/lockstep#readme', '_blank')",
+    "window.open('https://lockstepcloud.com/docs', '_blank')",
   ],
 ];
 for (const [find, repl] of patches) {
   if (!dc.includes(find)) throw new Error("patch anchor not found: " + find.slice(0, 64));
-  dc = dc.replace(find, repl);
+  dc = dc.split(find).join(repl); // replace all occurrences (anchors are unique except shared URLs)
 }
 
 const n = write("index.html", dc);

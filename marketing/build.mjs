@@ -197,5 +197,7 @@ fs.mkdirSync(new URL("./dist/", here), { recursive: true });
 for (const f of ["favicon.svg", "favicon.ico", "favicon-32.png", "favicon-16.png", "apple-touch-icon.png", "icon-192.png"]) {
   try { fs.copyFileSync(new URL("./" + f, here), new URL("./dist/" + f, here)); } catch {}
 }
+// Hand-authored docs page (served at /docs by Cloudflare Pages clean URLs).
+fs.copyFileSync(new URL("./docs.html", here), new URL("./dist/docs.html", here));
 fs.writeFileSync(new URL("./dist/index.html", here), out);
 console.log("dist/index.html:", out.length, "bytes · leftover dynamic tokens:", leftover.length ? leftover.join(", ") : "none");

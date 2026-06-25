@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lockstep — Docs &amp; setup guide</title>
+<meta name="description" content="Set up Lockstep end to end: create an org, connect your bucket, make a repo, install the Unreal plugin, and lock files like Perforce.">
+<meta name="theme-color" content="#0a0d11">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="alternate icon" href="/favicon.ico" sizes="any">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
+<style>
+  :root{
+    --bg:#0a0d11; --panel:#11161d; --card:#161d25; --line:#232c36; --line2:#2c3744;
+    --text:#eef2f6; --muted:#bcc6d1; --dim:#9aa7b6; --faint:#7d8b9c;
+    --amber:#ffb224; --amber2:#ffc658; --mono:'Spline Sans Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--text);font:400 16px/1.7 'Sora',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  a{color:var(--amber2);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code{font:500 13.5px/1.5 var(--mono);background:#0e131a;border:1px solid var(--line);border-radius:5px;padding:1px 6px;color:#dfe7ef}
+  pre{margin:14px 0;background:#0e131a;border:1px solid var(--line);border-radius:10px;padding:16px 18px;overflow:auto}
+  pre code{background:none;border:none;padding:0;color:#cdd7e1;font-size:13px;line-height:1.6;white-space:pre}
+  h1,h2,h3{font-family:'Sora';letter-spacing:-0.02em;color:var(--text);line-height:1.2}
+  h2{font-size:26px;margin:48px 0 12px;padding-top:12px}
+  h3{font-size:18px;margin:28px 0 8px;color:#dfe7ef}
+  p{color:var(--muted);margin:10px 0}
+  ul,ol{color:var(--muted);padding-left:22px}
+  li{margin:6px 0}
+  hr{border:none;border-top:1px solid var(--line);margin:40px 0}
+
+  /* header */
+  header{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:16px;
+    padding:14px 24px;background:rgba(10,13,17,0.82);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:10px;font:700 17px/1 'Sora';color:var(--text)}
+  .brand .mark{width:26px;height:26px;border-radius:8px;background:var(--amber);display:inline-flex;align-items:center;justify-content:center;color:#1a1206}
+  header nav{margin-left:auto;display:flex;gap:18px;align-items:center}
+  header nav a{font:500 14px/1 'Sora';color:var(--muted)}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:9px 15px;border-radius:7px;font:600 13px/1 'Sora';
+    background:var(--amber);color:#1a1206 !important;text-decoration:none !important;white-space:nowrap}
+  .btn.ghost{background:#1b232c;color:var(--text) !important;border:1px solid var(--line2)}
+
+  /* layout */
+  .wrap{display:grid;grid-template-columns:248px minmax(0,1fr);gap:48px;max-width:1100px;margin:0 auto;padding:0 24px}
+  aside{position:sticky;top:62px;align-self:start;height:calc(100vh - 62px);overflow:auto;padding:28px 0}
+  aside .grp{font:600 11px/1 var(--mono);text-transform:uppercase;letter-spacing:0.08em;color:var(--faint);margin:22px 0 8px}
+  aside a{display:block;padding:6px 12px;border-radius:7px;font:500 14px/1.35 'Sora';color:var(--dim);border-left:2px solid transparent}
+  aside a:hover{color:var(--text);text-decoration:none;background:#10151c}
+  aside a.active{color:var(--amber2);border-left-color:var(--amber);background:#10151c}
+  main{padding:34px 0 120px;min-width:0}
+  main>p:first-of-type{font-size:18px;color:var(--muted)}
+
+  .lead{font-size:15px;color:var(--dim);margin-top:-4px}
+  .note{border:1px solid var(--line);border-left:3px solid var(--amber);background:#12171f;border-radius:8px;padding:12px 16px;margin:16px 0}
+  .note .t{font:600 13px/1 'Sora';color:var(--amber2);margin-bottom:6px;display:flex;align-items:center;gap:7px}
+  .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:16px 0}
+  .dl{display:block;border:1px solid var(--line);border-radius:12px;background:var(--card);padding:18px 18px}
+  .dl:hover{border-color:var(--line2);text-decoration:none}
+  .dl .pf{display:flex;align-items:center;gap:9px;font:600 15px/1 'Sora';color:var(--text)}
+  .dl .d{font:400 13px/1.5 'Sora';color:var(--dim);margin-top:7px}
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:14px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);color:var(--muted);vertical-align:top}
+  th{color:var(--faint);font:600 12px/1 var(--mono);text-transform:uppercase;letter-spacing:0.05em}
+  .step{display:flex;gap:14px;margin:18px 0}
+  .step .n{flex:none;width:28px;height:28px;border-radius:50%;background:#1b232c;border:1px solid var(--line2);color:var(--amber2);font:700 13px/28px 'Sora';text-align:center}
+  .step .b{min-width:0}
+  .step .b h3{margin-top:2px}
+  footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;color:var(--faint);font-size:13px}
+
+  .menu-btn{display:none}
+  @media (max-width:860px){
+    .wrap{grid-template-columns:1fr;gap:0}
+    aside{position:fixed;top:57px;left:0;right:0;height:auto;max-height:70vh;background:var(--panel);border-bottom:1px solid var(--line);padding:14px 24px;display:none;z-index:20}
+    aside.open{display:block}
+    .menu-btn{display:inline-flex}
+    header nav a.hide-sm{display:none}
+    .grid2{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <a class="brand" href="/"><span class="mark"><svg width="15" height="15" viewBox="0 0 56 56" fill="none"><circle cx="28" cy="22" r="7" fill="#1a1206"/><rect x="24.5" y="24.5" width="7" height="16" rx="3.5" fill="#1a1206"/></svg></span>Lockstep</a>
+  <nav>
+    <a class="hide-sm" href="/">Home</a>
+    <a class="hide-sm" href="https://github.com/nikrich/lockstep">GitHub</a>
+    <a class="btn ghost menu-btn" onclick="document.querySelector('aside').classList.toggle('open')"><i data-lucide="menu" style="width:16px;height:16px"></i>Contents</a>
+    <a class="btn" href="https://app.lockstepcloud.com">Open dashboard</a>
+  </nav>
+</header>
+
+<div class="wrap">
+  <aside id="toc">
+    <div class="grp">Get started</div>
+    <a href="#overview">How it works</a>
+    <a href="#account">1. Account &amp; org</a>
+    <a href="#storage">2. Connect storage</a>
+    <a href="#repo">3. Create a repo</a>
+    <a href="#project">4. Prepare your UE project</a>
+    <div class="grp">Unreal plugin</div>
+    <a href="#install">5. Install the plugin</a>
+    <a href="#connect">6. Connect &amp; sign in</a>
+    <a href="#workflow">7. Daily workflow</a>
+    <a href="#locking">8. Locking explained</a>
+    <div class="grp">Reference</div>
+    <a href="#tokens">Tokens &amp; CI</a>
+    <a href="#admin">Admin &amp; force-unlock</a>
+    <a href="#downloads">Downloads</a>
+    <a href="#troubleshooting">Troubleshooting</a>
+    <a href="#links">All links</a>
+  </aside>
+
+  <main>
+    <h1>Setup &amp; usage guide</h1>
+    <p>Everything from zero to locking your first asset: create an org, connect a bucket you own, make a repo, install the Unreal plugin, and check out files like Perforce — on top of plain git.</p>
+
+    <h2 id="overview">How it works</h2>
+    <p>Lockstep keeps your <strong>code and small files in git</strong> and streams <strong>big binary assets straight into a bucket you own</strong> (Cloudflare R2, Backblaze B2, Wasabi, MinIO, or S3) via the Git&nbsp;LFS protocol. The coordination server only ever brokers short-lived presigned URLs — <strong>blob bytes never pass through it</strong>. On top, it adds the thing git can't do for binaries: <strong>Perforce-grade file locking</strong>, enforced in-editor by the Unreal plugin.</p>
+    <ul>
+      <li><strong>Control plane (dashboard, you sign in with OAuth):</strong> create an org, connect storage once, create repos, invite members, mint tokens.</li>
+      <li><strong>Data plane (git, git-lfs, the UE plugin):</strong> authenticate with a token and receive only presigned URLs — never your bucket keys.</li>
+    </ul>
+
+    <h2 id="account">1. Account &amp; org</h2>
+    <div class="step"><div class="n">1</div><div class="b">
+      <h3>Sign in</h3>
+      <p>Go to <a href="https://app.lockstepcloud.com">app.lockstepcloud.com</a> and sign in with <strong>GitHub</strong> or <strong>Google</strong>. No password to manage.</p>
+    </div></div>
+    <div class="step"><div class="n">2</div><div class="b">
+      <h3>Create an org</h3>
+      <p>An org is where your team, repos, storage and billing live. Pick a name; the <strong>URL slug is permanent</strong>. Each active member is a billable seat (roles: owner / admin / member).</p>
+    </div></div>
+
+    <h2 id="storage">2. Connect storage</h2>
+    <p>In the dashboard, open <strong>Storage</strong> and connect your bucket <em>once</em> at the org level. You supply S3-compatible credentials (endpoint, region, bucket, access key, secret); Lockstep test-connects and stores the secret <strong>encrypted at rest</strong> (AES-256-GCM). Clients never see these keys — they only get presigned URLs.</p>
+    <div class="note"><div class="t"><i data-lucide="shield-check" style="width:15px;height:15px"></i>Bring your own bucket</div>
+      R2 and B2 are cheapest because egress is free via the Bandwidth Alliance. You keep ownership and control retention/GC.</div>
+
+    <h2 id="repo">3. Create a repo</h2>
+    <p>Open <strong>Repositories → Create</strong> and give it a name. The slug becomes your repo URL:</p>
+    <pre><code>https://api.lockstepcloud.com/&lt;your-repo-slug&gt;</code></pre>
+    <p>On the repo page you'll find the <strong>Use Lockstep for assets</strong> card with a ready-to-commit <code>.lfsconfig</code>, an install snippet, and a <strong>Download Unreal plugin</strong> button. The <strong>Lock overview</strong> on the same page shows every active lock.</p>
+
+    <h2 id="project">4. Prepare your UE project</h2>
+    <p>Your Unreal project must be a <strong>git working copy</strong>. Two files go at its root and get committed:</p>
+    <h3><code>.lfsconfig</code> — point LFS at your repo</h3>
+    <pre><code>[lfs]
+  url = https://api.lockstepcloud.com/your-repo-slug</code></pre>
+    <h3><code>.gitattributes</code> — mark binary types <code>lockable</code></h3>
+    <p>Locking only applies to file types flagged <code>lockable</code> (unmergeable binaries). Mergeable text/code stays normal git.</p>
+    <pre><code>*.uasset filter=lfs diff=lfs merge=lfs -text lockable
+*.umap   filter=lfs diff=lfs merge=lfs -text lockable
+*.fbx    filter=lfs diff=lfs merge=lfs -text lockable
+*.blend  filter=lfs diff=lfs merge=lfs -text lockable
+# textures/audio: LFS but not lockable (safe to fetch concurrently)
+*.png filter=lfs diff=lfs merge=lfs -text
+*.wav filter=lfs diff=lfs merge=lfs -text</code></pre>
+    <pre><code>git lfs install
+git add .gitattributes .lfsconfig
+git commit -m "Use Lockstep for LFS + lock binary assets"</code></pre>
+    <div class="note"><div class="t"><i data-lucide="info" style="width:15px;height:15px"></i>Prerequisites</div>
+      Install <strong>git</strong> and <strong>git-lfs</strong> and make sure they're on your PATH.</div>
+
+    <h2 id="install">5. Install the Unreal plugin</h2>
+    <ol>
+      <li>Download the plugin (see <a href="#downloads">Downloads</a>) and unzip it into your project so you get <code>&lt;YourProject&gt;/Plugins/LockstepSourceControl/</code>.</li>
+      <li>Open the project. On Windows the binaries are prebuilt; on macOS/Linux the editor compiles the source on first open (click <em>Yes</em> to rebuild).</li>
+      <li><strong>Edit → Plugins</strong>, search <em>Lockstep</em> (category: Source Control), make sure it's enabled, restart if asked.</li>
+    </ol>
+
+    <h2 id="connect">6. Connect &amp; sign in</h2>
+    <div class="step"><div class="n">1</div><div class="b">
+      <h3>Pick the provider</h3>
+      <p><strong>Revision Control</strong> (bottom-right status bar) → <strong>Connect</strong> → Provider: <strong>Lockstep</strong>.</p>
+    </div></div>
+    <div class="step"><div class="n">2</div><div class="b">
+      <h3>Server URL</h3>
+      <p>Paste your repo URL — the same value as <code>lfs.url</code> in <code>.lfsconfig</code>, e.g. <code>https://api.lockstepcloud.com/your-repo-slug</code>.</p>
+    </div></div>
+    <div class="step"><div class="n">3</div><div class="b">
+      <h3>Sign in to Lockstep</h3>
+      <p>Click <strong>Sign in to Lockstep</strong>. Your browser opens; authorize with GitHub/Google and you're returned automatically. The access token is stored securely in your OS credential manager — no env vars, no copy-paste.</p>
+    </div></div>
+    <div class="step"><div class="n">4</div><div class="b">
+      <h3>Accept &amp; connect</h3>
+      <p><strong>Accept Settings → Connect.</strong> The status bar shows Lockstep connected.</p>
+    </div></div>
+
+    <h2 id="workflow">7. Daily workflow</h2>
+    <p>The core loop for a binary asset is <strong>Check&nbsp;Out → edit → Submit</strong>:</p>
+    <table>
+      <tr><th>Action</th><th>How</th><th>What happens</th></tr>
+      <tr><td>Check out</td><td>Right-click asset → Revision Control → Check Out</td><td>Acquires your <strong>exclusive lock</strong>. Others can't edit it until you release.</td></tr>
+      <tr><td>See who holds a lock</td><td>Asset icon / tooltip in the Content Browser</td><td>"Checked out by <em>name</em>" badge when someone else holds it.</td></tr>
+      <tr><td>Submit</td><td>Toolbar → Submit Content</td><td><code>git add</code> + <code>commit</code> + <code>push</code>, then releases your lock.</td></tr>
+      <tr><td>Add a new asset</td><td>Save it, then Submit</td><td>Marked for add and committed.</td></tr>
+      <tr><td>Get latest</td><td>Revision Control → Sync</td><td><code>git pull</code>; LFS blobs stream from your bucket.</td></tr>
+      <tr><td>Discard + release</td><td>Revision Control → Revert</td><td>Throws away local changes and releases your lock.</td></tr>
+    </table>
+    <p>Verify a checkout round-trips by opening your repo in the dashboard — the <strong>Active locks</strong> list should show it.</p>
+
+    <h2 id="locking">8. Locking explained</h2>
+    <p>Binary Unreal assets can't be merged, so "resolve later" means someone's work is destroyed. Lockstep is therefore <strong>hybrid</strong>:</p>
+    <table>
+      <tr><th>File type</th><th>Model</th></tr>
+      <tr><td>Source / code (<code>.cpp .h .ini .json</code>)</td><td>git optimistic merge — no locks</td></tr>
+      <tr><td>Binary assets (<code>.uasset .umap .fbx .blend</code>)</td><td><strong>Pessimistic lock</strong> — one editor at a time, enforced in-editor</td></tr>
+    </table>
+    <p>Acquisition is a single transactional insert keyed <code>UNIQUE(repo, path)</code>, so there's no double-lock race.</p>
+
+    <h2 id="tokens">Tokens &amp; CI</h2>
+    <p>The in-editor sign-in is the easy path for people. For <strong>CI, scripts, or headless builds</strong>, mint a Personal Access Token in the dashboard (<strong>Access tokens → Generate</strong>; scopes lock/read/write) and provide it as the <code>LOCKSTEP_TOKEN</code> environment variable, or as the password for git over HTTPS. The token is shown once. Tokens are revocable from the same page.</p>
+
+    <h2 id="admin">Admin &amp; force-unlock</h2>
+    <p>Owners and admins can <strong>force-release</strong> a lock held by someone else (e.g. a teammate is offline) — a plain member cannot steal a lock. Storage configuration is owner/admin-only. Stale locks are managed with TTL/heartbeat.</p>
+
+    <h2 id="downloads">Downloads</h2>
+    <p>Unreal Engine <strong>5.7</strong>. All assets live on the release page:</p>
+    <div class="grid2">
+      <a class="dl" href="https://github.com/nikrich/lockstep/releases/download/ue-plugin-v0.2.0/LockstepSourceControl-UE5.7-Win64.zip">
+        <span class="pf"><i data-lucide="monitor" style="width:18px;height:18px"></i>Windows (prebuilt)</span>
+        <span class="d">Drop into <code>Plugins/</code> and go — no compiler needed.</span>
+      </a>
+      <a class="dl" href="https://github.com/nikrich/lockstep/releases/download/ue-plugin-v0.2.0/LockstepSourceControl-Source-UE5.zip">
+        <span class="pf"><i data-lucide="apple" style="width:18px;height:18px"></i>macOS / Linux (source)</span>
+        <span class="d">The editor compiles it on first open (needs Xcode / clang).</span>
+      </a>
+    </div>
+    <p><a href="https://github.com/nikrich/lockstep/releases/tag/ue-plugin-v0.2.0">All downloads &amp; release notes →</a></p>
+
+    <h2 id="troubleshooting">Troubleshooting</h2>
+    <table>
+      <tr><th>Symptom</th><th>Fix</th></tr>
+      <tr><td>Revision Control actions all greyed out</td><td>The provider isn't connected, or the project isn't a git repo. Check the project has <code>.git</code> and is connected (Output Log, filter <code>Lockstep</code>).</td></tr>
+      <tr><td>"Check Out" disabled on an asset</td><td>The type isn't marked <code>lockable</code> in <code>.gitattributes</code>, or status is stale — add the flag, then Revision Control → Refresh.</td></tr>
+      <tr><td>"Cannot check out: Lockstep is not configured"</td><td>You're not signed in. Open the provider settings and click <strong>Sign in to Lockstep</strong> (or set <code>LOCKSTEP_TOKEN</code>).</td></tr>
+      <tr><td>"Already locked by …"</td><td>Someone else holds the lock. Coordinate, or an admin can force-release it.</td></tr>
+    </table>
+
+    <h2 id="links">All links</h2>
+    <ul>
+      <li><a href="https://app.lockstepcloud.com">Dashboard</a> — sign in, orgs, storage, repos, tokens, locks.</li>
+      <li><a href="https://github.com/nikrich/lockstep/releases/tag/ue-plugin-v0.2.0">Plugin downloads</a> — Windows &amp; macOS/Linux.</li>
+      <li><a href="https://github.com/nikrich/lockstep">Source on GitHub</a> — fair-source (BSL 1.1).</li>
+      <li><a href="https://github.com/nikrich/lockstep/blob/main/docs/architecture.md">Architecture</a> — the full design.</li>
+      <li><a href="mailto:hello@lockstepcloud.com">hello@lockstepcloud.com</a> — support.</li>
+    </ul>
+  </main>
+</div>
+
+<footer>Lockstep — own your bytes. Fair-source under BSL 1.1, free for orgs under $1M/yr revenue.</footer>
+
+<script>
+  // Active section highlight in the sidebar.
+  (function () {
+    var links = Array.prototype.slice.call(document.querySelectorAll('#toc a[href^="#"]'));
+    var map = {};
+    links.forEach(function (a) { var el = document.getElementById(a.getAttribute('href').slice(1)); if (el) map[a.getAttribute('href')] = el; });
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) {
+          var id = '#' + e.target.id;
+          links.forEach(function (a) { a.classList.toggle('active', a.getAttribute('href') === id); });
+        }
+      });
+    }, { rootMargin: '-10% 0px -75% 0px' });
+    Object.values(map).forEach(function (el) { obs.observe(el); });
+    // Close mobile menu on nav.
+    links.forEach(function (a) { a.addEventListener('click', function () { document.querySelector('aside').classList.remove('open'); }); });
+    if (window.lucide) window.lucide.createIcons({ attrs: { 'stroke-width': 1.75 } });
+    document.addEventListener('DOMContentLoaded', function () { if (window.lucide) window.lucide.createIcons({ attrs: { 'stroke-width': 1.75 } }); });
+  })();
+</script>
+</body>
+</html>
