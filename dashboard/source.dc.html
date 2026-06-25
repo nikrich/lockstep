@@ -380,7 +380,7 @@ class Component extends DCLogic {
       this.topbar(),
       h('div', { style: { flex: 1, display: 'flex', minHeight: 0, position: 'relative' } },
         narrow ? this.drawer() : this.sidebar(),
-        h('div', { style: { flex: 1, minWidth: 0, overflowY: 'auto', background: 'var(--bg-app)' } }, this.content())));
+        h('div', { style: { flex: 1, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', background: 'var(--bg-app)' } }, this.content())));
   }
 
   topbar() {
@@ -772,7 +772,7 @@ class Component extends DCLogic {
     const maskKey = k => k.length > 8 ? k.slice(0, 4) + '\u2026' + k.slice(-2) : '\u2022\u2022\u2022\u2022';
     const row = (label, value, mono = true) => h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '11px 0', borderBottom: '1px solid var(--hairline)' } },
       h('span', { style: { font: '500 12.5px/1 Sora, sans-serif', color: 'var(--text-muted)', flex: 'none' } }, label),
-      h('span', { style: { font: (mono ? '500 13px/1.3 "Spline Sans Mono", monospace' : '500 13px/1.3 Sora, sans-serif'), color: 'var(--text-body)', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, value));
+      h('span', { style: { flex: 1, minWidth: 0, font: (mono ? '500 13px/1.3 "Spline Sans Mono", monospace' : '500 13px/1.3 Sora, sans-serif'), color: 'var(--text-body)', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, value));
     const folders = (st.byRepo || []).map(r => ({ p: r.repo, gb: r.bytes / 1e9 }));
     const maxF = folders.length ? Math.max(...folders.map(f => f.gb)) : 1;
     const rate = ({ r2: 0.015, b2: 0.006, wasabi: 0.0068, s3: 0.023, minio: 0 })[st.provider] || 0.015;
@@ -854,7 +854,7 @@ class Component extends DCLogic {
       this.seatMeterCard(),
       canManage && h(Card, { pad: 'lg', style: { marginTop: 14 } },
         this.sectionLabel('Invite by email'),
-        h('div', { style: { display: 'flex', gap: 10, alignItems: 'flex-end' } },
+        h('div', { style: { display: 'flex', flexDirection: this.narrow() ? 'column' : 'row', gap: 10, alignItems: this.narrow() ? 'stretch' : 'flex-end' } },
           h('div', { style: { flex: 1 } }, h(Input, { placeholder: 'name@studio.com', iconLeft: h(Icon, { n: 'mail', s: 15 }), value: this.state.inviteEmail, onChange: e => this.setState({ inviteEmail: e.target.value }) })),
           h(Segmented, { value: this.state.inviteRole, onChange: v => this.setState({ inviteRole: v }), options: [{ value: 'Member', label: 'Member' }, { value: 'Admin', label: 'Admin' }] }),
           h(Button, { variant: 'primary', disabled: !emailValid || seats + org.invites.length >= total, iconLeft: h(Icon, { n: 'send', s: 15 }), onClick: () => {
@@ -1077,17 +1077,17 @@ class Component extends DCLogic {
     return this.pageWrap([
       this.pageHead('Settings', 'Organization, security policy and your profile.', null),
       h(Card, { pad: 'lg', style: { marginBottom: 14 } }, this.sectionLabel('Organization'),
-        h('div', { style: { display: 'flex', gap: 12 } },
+        h('div', { style: { display: 'flex', flexDirection: this.narrow() ? 'column' : 'row', gap: 12 } },
           h(Input, { label: 'Organization name', defaultValue: org.name, style: { flex: 2 } }),
           h('div', { style: { flex: 1, display: 'flex', flexDirection: 'column', gap: 6 } },
             h('span', { style: { font: '600 13px/1 Sora, sans-serif', color: 'var(--text-secondary)' } }, 'Slug'),
             h('div', { style: { display: 'flex', alignItems: 'center', height: 'var(--control-md)', padding: '0 11px', background: 'var(--surface-sunken)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', font: '500 13px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, org.slug))),
         h('div', { style: { marginTop: 16 } }, h(Button, { variant: 'secondary', size: 'sm', onClick: () => this.flash('Organization updated', 'mine') }, 'Save changes'))),
       h(Card, { pad: 'lg', style: { marginBottom: 14 } }, this.sectionLabel('Security'),
-        h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '6px 0 16px', borderBottom: '1px solid var(--hairline)' } },
+        h('div', { style: { display: 'flex', flexDirection: this.narrow() ? 'column' : 'row', alignItems: this.narrow() ? 'stretch' : 'center', justifyContent: 'space-between', gap: this.narrow() ? 12 : 16, padding: '6px 0 16px', borderBottom: '1px solid var(--hairline)' } },
           h('div', { style: { maxWidth: 440 } }, h('div', { style: { font: '600 13.5px/1.2 Sora, sans-serif', color: 'var(--text-body)' } }, 'Presigned URL lifetime'), h('div', { style: { font: '400 12px/1.45 Sora, sans-serif', color: 'var(--text-muted)', marginTop: 3 } }, 'How long a signed blob link stays valid. Shorter is safer; longer survives slow uploads.')),
           h(Segmented, { value: String(org.ttl), onChange: v => this.patchOrg({ ttl: +v }), options: [{ value: '5', label: '5 min' }, { value: '15', label: '15 min' }, { value: '60', label: '60 min' }] })),
-        h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '16px 0 6px' } },
+        h('div', { style: { display: 'flex', flexDirection: this.narrow() ? 'column' : 'row', alignItems: this.narrow() ? 'stretch' : 'center', justifyContent: 'space-between', gap: this.narrow() ? 12 : 16, padding: '16px 0 6px' } },
           h('div', { style: { maxWidth: 440 } }, h('div', { style: { font: '600 13.5px/1.2 Sora, sans-serif', color: 'var(--text-body)' } }, 'Default lock policy'), h('div', { style: { font: '400 12px/1.45 Sora, sans-serif', color: 'var(--text-muted)', marginTop: 3 } }, 'Hard exclusive blocks a second editor outright (Perforce-style). Soft advises but allows override.')),
           h(Segmented, { value: org.lockPolicy, onChange: v => this.patchOrg({ lockPolicy: v }), options: [{ value: 'hard', label: 'Hard exclusive' }, { value: 'soft', label: 'Soft / advisory' }] }))),
       h(Card, { pad: 'lg' }, this.sectionLabel('Your profile'),
