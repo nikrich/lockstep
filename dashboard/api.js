@@ -132,6 +132,30 @@
     };
   }
 
+  // Merge a (lazily-fetched) usage response into an org's storage + repo sizes.
+  function applyUsage(comp, orgId, usageData) {
+    if (!usageData) return;
+    var bytes = usageData.totalBytes || 0;
+    var statsByRepo = {};
+    (usageData.byRepo || []).forEach(function (br) { statsByRepo[br.repo] = br; });
+    comp.setState(function (s) {
+      var cur = s.orgs && s.orgs[orgId];
+      if (!cur) return {};
+      var orgs = Object.assign({}, s.orgs);
+      orgs[orgId] = Object.assign({}, cur, {
+        storage: Object.assign({}, cur.storage, {
+          storedBytes: bytes, storedGB: Math.round((bytes / 1e9) * 100) / 100,
+          blobs: usageData.objects || 0, byRepo: usageData.byRepo || [], statsReady: true,
+        }),
+        repos: cur.repos.map(function (r) {
+          var st = statsByRepo[r.slug] || {};
+          return Object.assign({}, r, { sizeGB: Math.round((st.bytes || 0) / 1e9), blobs: st.objects || 0 });
+        }),
+      });
+      return { orgs: orgs };
+    });
+  }
+
   window.LSAPI = {
     isLocal: isLocal,
     api: API,
@@ -155,12 +179,12 @@
               return Promise.all([
                 req("GET", "/orgs/" + o.id + "/repos").catch(function () { return { repos: [] }; }),
                 req("GET", "/orgs/" + o.id + "/storage").catch(function () { return { storage: null }; }),
-                req("GET", "/orgs/" + o.id + "/storage/usage").catch(function () { return null; }),
                 req("GET", "/orgs/" + o.id + "/activity").catch(function () { return null; }),
                 req("GET", "/orgs/" + o.id + "/members").catch(function () { return null; }),
                 req("GET", "/orgs/" + o.id + "/billing").catch(function () { return null; }),
               ]).then(function (rs) {
-                return mapOrg(o, (rs[0] && rs[0].repos) || [], tokens, rs[1] && rs[1].storage, rs[2], rs[3], rs[4], rs[5], user);
+                // usage = a full bucket listing (slow); loaded lazily after render
+                return mapOrg(o, (rs[0] && rs[0].repos) || [], tokens, rs[1] && rs[1].storage, null, rs[2], rs[3], rs[4], user);
               });
             }));
           }).then(function (orgsArr) {
@@ -168,6 +192,10 @@
             orgsArr.forEach(function (o) { orgs[o.id] = o; });
             comp.setState({ orgs: orgs, orgId: orgsArr[0].id, route: "app", user: user });
             console.log("[LSAPI] signed in as " + (user && (user.email || user.name) || "?") + " · " + orgsArr.length + " org(s)");
+            // Fill in storage usage (slow bucket listing) without blocking render.
+            orgsArr.forEach(function (o) {
+              req("GET", "/orgs/" + o.id + "/storage/usage").then(function (u) { applyUsage(comp, o.id, u); }).catch(function () {});
+            });
           });
         });
       }).catch(function (e) {

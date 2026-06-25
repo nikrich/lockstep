@@ -194,8 +194,9 @@ export async function usage(
       .sort((a, b) => b.bytes - a.bytes),
     truncated: !!token,
   };
-  // Cache for 60s so dashboard loads aren't re-listing the bucket every time.
-  await env.SESSIONS.put(cacheKey, JSON.stringify(result), { expirationTtl: 60 });
+  // Cache for 10 min so dashboard loads rarely re-list the bucket (the listing
+  // can take ~10s for tens of thousands of objects). Busted on storage changes.
+  await env.SESSIONS.put(cacheKey, JSON.stringify(result), { expirationTtl: 600 });
   return result;
 }
 
