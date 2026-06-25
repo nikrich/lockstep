@@ -433,14 +433,18 @@ app.get("/:orgId/billing", async (c) => {
   });
 });
 
-// Start a hosted Polar checkout for the org's current seat count.
+// Start a hosted Polar checkout. The first FREE_SEATS seats are free, so we only
+// bill for seats beyond that allowance.
 app.post("/:orgId/billing/checkout", async (c) => {
   const id = c.get("identity");
   const orgId = c.req.param("orgId");
   if (!isManager(await orgRole(c.env, orgId, id.userId))) {
     return c.json({ message: "must be an org owner or admin" }, 403);
   }
-  const seats = Math.max(1, await activeSeatCount(c.env, orgId));
+  const seats = (await activeSeatCount(c.env, orgId)) - FREE_SEATS;
+  if (seats < 1) {
+    return c.json({ message: `Your first ${FREE_SEATS} seat${FREE_SEATS === 1 ? "" : "s"} are free — add a teammate to start a paid subscription.` }, 400);
+  }
   try {
     const co = await createCheckout(c.env, {
       orgId,
