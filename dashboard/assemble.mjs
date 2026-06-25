@@ -65,6 +65,12 @@ const patches = [
     "this.flash('Repository ' + name.trim() + ' created', 'mine'); if (window.LSAPI) window.LSAPI.createRepo(this.state.orgId, name.trim()).catch(e => this.flash('Create failed: ' + e.message, 'conflict'));",
   ],
   // (token creation is wired directly in the token dialog / commitToken)
+  // onboarding: offer the prebuilt Unreal plugin download in the repo setup card
+  [
+    `codeBlock('Install + commit', 'git lfs install\\ngit add .lfsconfig && git commit -m "Use Lockstep for LFS"')),`,
+    `codeBlock('Install + commit', 'git lfs install\\ngit add .lfsconfig && git commit -m "Use Lockstep for LFS"'),
+        h(Button, { variant: 'secondary', size: 'sm', iconLeft: h(Icon, { n: 'download', s: 14 }), style: { marginTop: 12 }, onClick: () => window.open('https://github.com/nikrich/lockstep/releases/download/ue-plugin-v0.2.0/LockstepSourceControl-UE5.7-Win64.zip', '_blank') }, 'Download Unreal plugin (UE 5.7, Win64)')),`,
+  ],
 ];
 for (const [find, repl] of patches) {
   if (!dc.includes(find)) throw new Error("patch anchor not found: " + find.slice(0, 64));
