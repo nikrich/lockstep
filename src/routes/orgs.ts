@@ -9,7 +9,7 @@ import { requireAuth } from "../lib/auth";
 import { uuid, aesEncrypt, randomId, sha256 } from "../lib/crypto";
 import { testConnection, usage } from "../lib/storage";
 import { orgRole } from "../lib/access";
-import { createCheckout, createPortalSession, billingConfigured } from "../lib/polar";
+import { createCheckout, createPortalSession, billingConfigured, getSeatPriceCents } from "../lib/polar";
 
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 
@@ -416,6 +416,8 @@ app.get("/:orgId/billing", async (c) => {
       polar_customer_id: string | null;
     }>();
   const seatsUsed = await activeSeatCount(c.env, orgId);
+  const seatCents = await getSeatPriceCents(c.env);
+  const seatPrice = seatCents != null ? Math.round(seatCents) / 100 : SEAT_PRICE;
 
   return c.json({
     plan: org?.plan ?? "free",
@@ -423,7 +425,7 @@ app.get("/:orgId/billing", async (c) => {
     seatsPaid: org?.seats_paid ?? 0,
     seatsUsed,
     freeSeats: FREE_SEATS,
-    seatPrice: SEAT_PRICE,
+    seatPrice,
     currentPeriodEnd: org?.current_period_end ?? null,
     hasCustomer: !!org?.polar_customer_id,
     configured: billingConfigured(c.env),

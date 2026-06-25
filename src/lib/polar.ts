@@ -55,6 +55,40 @@ export async function createCheckout(env: Env, opts: CheckoutOpts): Promise<{ ur
   return { url: j.url, id: j.id };
 }
 
+/** The product's per-seat price in cents, read from Polar (KV-cached 1h). */
+export async function getSeatPriceCents(env: Env): Promise<number | null> {
+  if (!billingConfigured(env)) return null;
+  const cacheKey = `seatprice:${env.POLAR_PRODUCT_ID}`;
+  try {
+    const cached = await env.SESSIONS.get(cacheKey);
+    if (cached !== null) return parseInt(cached, 10) || null;
+  } catch {
+    /* ignore cache miss */
+  }
+  try {
+    const res = await fetch(`${apiBase(env)}/v1/products/${env.POLAR_PRODUCT_ID}`, {
+      headers: { Authorization: `Bearer ${env.POLAR_ACCESS_TOKEN}` },
+    });
+    if (!res.ok) return null;
+    const j = (await res.json()) as {
+      prices?: Array<{ amount_type?: string; price_per_seat?: number; amount?: number }>;
+    };
+    const prices = j.prices || [];
+    const price = prices.find((p) => p.amount_type === "seat_based") || prices[0];
+    const cents = price?.price_per_seat ?? price?.amount ?? null;
+    if (cents != null) {
+      try {
+        await env.SESSIONS.put(cacheKey, String(cents), { expirationTtl: 3600 });
+      } catch {
+        /* best-effort cache */
+      }
+    }
+    return cents;
+  } catch {
+    return null;
+  }
+}
+
 /** Create a customer-portal session so a customer can manage card + invoices. */
 export async function createPortalSession(env: Env, customerId: string): Promise<string> {
   if (!env.POLAR_ACCESS_TOKEN) throw new Error("billing is not configured");
