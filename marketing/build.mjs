@@ -175,6 +175,10 @@ const head =
   '<meta property="og:description" content="' + desc + '">\n' +
   '<meta property="og:type" content="website">\n' +
   '<meta name="theme-color" content="#0a0d11">\n' +
+  '<link rel="icon" type="image/svg+xml" href="/favicon.svg">\n' +
+  '<link rel="alternate icon" type="image/png" sizes="32x32" href="/favicon-32.png">\n' +
+  '<link rel="apple-touch-icon" href="/apple-touch-icon.png">\n' +
+  '<link rel="icon" href="/favicon.ico" sizes="any">\n' +
   helmet;
 
 const out =
@@ -189,5 +193,9 @@ const out =
 // Write the built page into dist/ — that's the only directory we deploy, so the
 // build sources (source.dc.html, build.mjs) are never served publicly.
 fs.mkdirSync(new URL("./dist/", here), { recursive: true });
+// Copy favicon/icon assets (kept in marketing/) into the deployed dist/.
+for (const f of ["favicon.svg", "favicon.ico", "favicon-32.png", "favicon-16.png", "apple-touch-icon.png", "icon-192.png"]) {
+  try { fs.copyFileSync(new URL("./" + f, here), new URL("./dist/" + f, here)); } catch {}
+}
 fs.writeFileSync(new URL("./dist/index.html", here), out);
 console.log("dist/index.html:", out.length, "bytes · leftover dynamic tokens:", leftover.length ? leftover.join(", ") : "none");
