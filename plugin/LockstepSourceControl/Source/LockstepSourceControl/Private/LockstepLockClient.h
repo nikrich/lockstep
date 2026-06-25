@@ -10,11 +10,10 @@
 //
 // Auth is a Lockstep Personal Access Token (lsk_...) sent as a Bearer header.
 //
-// THREADING: the send path BLOCKS until the HTTP request completes, which is
-// driven by FHttpManager::Tick on the game thread. Therefore these methods are
-// safe to call ONLY from a background worker thread (i.e. from an asynchronous
-// source-control command) — never from the game thread, or you deadlock. A
-// check() enforces this in development builds.
+// THREADING: every call BLOCKS until the HTTP request completes. Completion is
+// dispatched from FHttpManager::Tick on the game thread, so the client adapts:
+// on a worker thread it waits on an event; on the game thread it pumps the HTTP
+// manager itself until the request finishes. Safe from either context.
 #pragma once
 
 #include "CoreMinimal.h"

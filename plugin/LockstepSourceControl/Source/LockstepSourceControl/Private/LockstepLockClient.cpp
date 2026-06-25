@@ -3,8 +3,11 @@
 #include "LockstepLockClient.h"
 
 #include "HttpModule.h"
+#include "HttpManager.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
+#include "Templates/Atomic.h"
+#include "HAL/PlatformTime.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Serialization/JsonReader.h"
@@ -87,12 +90,6 @@ bool FLockstepLockClient::SendBlocking(
 	FString& OutResponseBody,
 	FString& OutError) const
 {
-	// Completion is dispatched from the game thread's HTTP manager tick; blocking
-	// here from the game thread would deadlock. Source-control lock work always
-	// runs on a worker thread, but assert it so a future caller can't regress.
-	checkf(!IsInGameThread(),
-		TEXT("FLockstepLockClient must be called from a background thread (HTTP completes on the game thread)."));
-
 	if (!IsConfigured())
 	{
 		OutError = TEXT("Lockstep is not configured (missing server URL or access token).");
@@ -111,13 +108,14 @@ bool FLockstepLockClient::SendBlocking(
 	}
 	Request->SetTimeout(HttpTimeoutSeconds); // IHttpRequest::SetTimeout exists across all UE5
 
+	TAtomic<bool> bCompleted(false);
 	FEvent* Done = FPlatformProcess::GetSynchEventFromPool(/*bIsManualReset=*/true);
 	bool bTransportOk = false;
 	int32 LocalStatus = 0;
 	FString LocalBody;
 
 	Request->OnProcessRequestComplete().BindLambda(
-		[&bTransportOk, &LocalStatus, &LocalBody, Done](FHttpRequestPtr, FHttpResponsePtr Response, bool bConnectedSuccessfully)
+		[&bTransportOk, &LocalStatus, &LocalBody, &bCompleted, Done](FHttpRequestPtr, FHttpResponsePtr Response, bool bConnectedSuccessfully)
 		{
 			if (bConnectedSuccessfully && Response.IsValid())
 			{
@@ -125,6 +123,7 @@ bool FLockstepLockClient::SendBlocking(
 				LocalStatus = Response->GetResponseCode();
 				LocalBody = Response->GetContentAsString();
 			}
+			bCompleted = true;
 			Done->Trigger();
 		});
 
@@ -135,7 +134,27 @@ bool FLockstepLockClient::SendBlocking(
 		return false;
 	}
 
-	Done->Wait();
+	// Completion fires from FHttpManager::Tick on the game thread. On a worker
+	// thread we can simply wait; on the game thread we must drive the manager
+	// ourselves or the request would never complete (deadlock).
+	if (IsInGameThread())
+	{
+		FHttpManager& HttpManager = FHttpModule::Get().GetHttpManager();
+		const double Start = FPlatformTime::Seconds();
+		while (!bCompleted.Load() && (FPlatformTime::Seconds() - Start) < HttpTimeoutSeconds)
+		{
+			HttpManager.Tick(0.0f);
+			FPlatformProcess::Sleep(0.005f);
+		}
+		if (!bCompleted.Load())
+		{
+			Request->CancelRequest();
+		}
+	}
+	else
+	{
+		Done->Wait();
+	}
 	FPlatformProcess::ReturnSynchEventToPool(Done);
 
 	if (!bTransportOk)

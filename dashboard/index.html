@@ -33,6 +33,7 @@
   @keyframes ls-grow{from{transform:scaleX(0);}to{transform:scaleX(1);}}
   @keyframes ls-breathe{0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(255,178,36,0);}50%{transform:scale(1.06);box-shadow:0 0 26px 5px rgba(255,178,36,0.30);}}
   @keyframes ls-dot{0%,100%{opacity:.2;transform:translateY(0);}50%{opacity:1;transform:translateY(-2px);}}
+  @keyframes ls-slidein{from{transform:translateX(-100%);}to{transform:translateX(0);}}
   /* Light variant: remap the ink + slate ramps; the semantic aliases follow. Status/lock colors stay identical. */
   [data-theme="light"]{
     /* raw ramp — for components that read --ink-*/--slate-* directly (Switch, Avatar, counts) */
@@ -186,6 +187,8 @@ class Component extends DCLogic {
     cmdOpen: false,
     cmdQuery: '',
     helpOpen: false,
+    vw: (typeof window !== 'undefined' && window.innerWidth) || 1200,
+    drawerOpen: false,
   };
 
   componentDidMount() {
@@ -203,8 +206,14 @@ class Component extends DCLogic {
       else if (e.key === 'Escape') this.setState({ cmdOpen: false, helpOpen: false });
     };
     window.addEventListener('keydown', this._onKey);
+    this._onResize = () => { const vw = window.innerWidth; this.setState(s => (s.vw === vw ? null : { vw: vw, drawerOpen: vw >= 860 ? false : s.drawerOpen })); };
+    window.addEventListener('resize', this._onResize);
+    this._onResize();
   }
-  componentWillUnmount() { if (this._onKey) window.removeEventListener('keydown', this._onKey); }
+  componentWillUnmount() {
+    if (this._onKey) window.removeEventListener('keydown', this._onKey);
+    if (this._onResize) window.removeEventListener('resize', this._onResize);
+  }
 
   org() { return this.state.orgs[this.state.orgId]; }
   patchOrg(patch) {
@@ -215,7 +224,14 @@ class Component extends DCLogic {
     clearTimeout(this._tt);
     this._tt = setTimeout(() => this.setState({ toast: null }), 2600);
   }
-  go(nav) { this.setState({ nav, repoOpen: null, orgMenuOpen: false, userMenuOpen: false }); }
+  go(nav) { this.setState({ nav, repoOpen: null, orgMenuOpen: false, userMenuOpen: false, drawerOpen: false }); }
+  narrow() { return this.state.vw < 860; }
+  drawer() {
+    if (!this.narrow() || !this.state.drawerOpen) return null;
+    return h(React.Fragment, null,
+      h('div', { onClick: () => this.setState({ drawerOpen: false }), style: { position: 'fixed', inset: 0, top: 54, background: 'rgba(0,0,0,0.55)', zIndex: 80 } }),
+      h('div', { style: { position: 'fixed', top: 54, left: 0, bottom: 0, zIndex: 90, boxShadow: 'var(--shadow-xl)', animation: 'ls-slidein .2s var(--ease-out)' } }, this.sidebar(true)));
+  }
 
   makeDraft(org) {
     const st = org.storage;
@@ -292,6 +308,7 @@ class Component extends DCLogic {
 
   // ================= AUTH =================
   signin() {
+    const narrow = this.narrow();
     const oauth = (label, icon, primary) => {
       const p = icon === 'github' ? 'github' : 'google';
       const busy = this.state.authBusy === p;
@@ -312,7 +329,7 @@ class Component extends DCLogic {
     };
 
     return h('div', { style: { flex: 1, display: 'flex', minHeight: 0 } },
-      h('div', { style: { flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: 48, background: 'radial-gradient(1100px 520px at 18% -10%, rgba(255,178,36,0.10), transparent 60%), var(--bg-panel)', borderRight: '1px solid var(--hairline)' } },
+      h('div', { style: { flex: '1 1 0', minWidth: 0, display: narrow ? 'none' : 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: 48, background: 'radial-gradient(1100px 520px at 18% -10%, rgba(255,178,36,0.10), transparent 60%), var(--bg-panel)', borderRight: '1px solid var(--hairline)' } },
         h('img', { src: this.state.theme === 'light' ? 'lockstep/logo-wordmark-light.svg' : 'lockstep/logo-wordmark-dark.svg', height: 30, style: { alignSelf: 'flex-start' } }),
         h('div', { style: { maxWidth: 460 } },
           h('div', { style: { font: '600 11px/1 "Spline Sans Mono", monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--amber-400)', marginBottom: 18 } }, 'Admin control plane'),
@@ -320,7 +337,7 @@ class Component extends DCLogic {
           h('p', { style: { font: '400 15px/1.6 Sora, sans-serif', color: 'var(--text-secondary)', marginTop: 18 } }, 'Set up storage, members, repos and billing for your team. This is the one place bucket credentials are ever entered \u2014 the desktop app never sees them.')),
         h('div', { style: { display: 'flex', gap: 22, font: '500 12px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } },
           h('span', null, '$0 egress'), h('span', null, '\u00b7'), h('span', null, 'BYO bucket'), h('span', null, '\u00b7'), h('span', null, 'Perforce-grade locks'))),
-      h('div', { style: { flex: '0 0 480px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, position: 'relative' } },
+      h('div', { style: { flex: narrow ? '1' : '0 0 480px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: narrow ? '32px 20px' : 40, position: 'relative' } },
         this.themeToggle({ position: 'absolute', top: 24, right: 24 }),
         h('div', { style: { width: '100%', maxWidth: 340 } },
           h('div', { style: { font: '700 24px/1.2 Sora, sans-serif', letterSpacing: '-0.015em', color: 'var(--text-strong)' } }, 'Sign in to Lockstep'),
@@ -359,23 +376,26 @@ class Component extends DCLogic {
 
   // ================= APP SHELL =================
   appShell() {
+    const narrow = this.narrow();
     return h('div', { style: { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 } },
       this.topbar(),
-      h('div', { style: { flex: 1, display: 'flex', minHeight: 0 } },
-        this.sidebar(),
+      h('div', { style: { flex: 1, display: 'flex', minHeight: 0, position: 'relative' } },
+        narrow ? this.drawer() : this.sidebar(),
         h('div', { style: { flex: 1, minWidth: 0, overflowY: 'auto', background: 'var(--bg-app)' } }, this.content())));
   }
 
   topbar() {
-    return h('div', { style: { height: 54, flex: 'none', display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px', background: 'var(--bg-panel)', borderBottom: '1px solid var(--hairline)', position: 'relative', zIndex: 50 } },
-      h('img', { src: this.state.theme === 'light' ? 'lockstep/logo-wordmark-light.svg' : 'lockstep/logo-wordmark-dark.svg', height: 22, style: { cursor: 'pointer' }, onClick: () => this.go('home') }),
-      h('span', { style: { width: 1, height: 22, background: 'var(--hairline)', margin: '0 4px' } }),
+    const narrow = this.narrow();
+    return h('div', { style: { height: 54, flex: 'none', display: 'flex', alignItems: 'center', gap: narrow ? 6 : 12, padding: narrow ? '0 8px' : '0 16px', background: 'var(--bg-panel)', borderBottom: '1px solid var(--hairline)', position: 'relative', zIndex: 50 } },
+      narrow && this.iconBtn('menu', () => this.setState(s => ({ drawerOpen: !s.drawerOpen })), 'Menu'),
+      h('img', { src: this.state.theme === 'light' ? 'lockstep/logo-wordmark-light.svg' : 'lockstep/logo-wordmark-dark.svg', height: 22, style: { cursor: 'pointer', flex: 'none' }, onClick: () => this.go('home') }),
+      !narrow && h('span', { style: { width: 1, height: 22, background: 'var(--hairline)', margin: '0 4px' } }),
       this.orgSwitcher(),
-      h('div', { style: { flex: 1 } }),
-      this.iconBtn('command', () => this.setState({ cmdOpen: true, cmdQuery: '' }), 'Command menu (\u2318K)'),
+      h('div', { style: { flex: 1, minWidth: 0 } }),
+      !narrow && this.iconBtn('command', () => this.setState({ cmdOpen: true, cmdQuery: '' }), 'Command menu (\u2318K)'),
       this.themeToggle(),
-      this.iconBtn('life-buoy', () => this.setState({ helpOpen: true }), 'Docs & support'),
-      h('span', { style: { width: 1, height: 22, background: 'var(--hairline)', margin: '0 2px' } }),
+      !narrow && this.iconBtn('life-buoy', () => this.setState({ helpOpen: true }), 'Docs & support'),
+      !narrow && h('span', { style: { width: 1, height: 22, background: 'var(--hairline)', margin: '0 2px' } }),
       this.userButton());
   }
 
@@ -388,8 +408,8 @@ class Component extends DCLogic {
         onMouseLeave: e => e.currentTarget.style.background = this.state.orgMenuOpen ? 'var(--surface-hover)' : 'transparent',
         style: { display: 'flex', alignItems: 'center', gap: 9, height: 38, padding: '0 9px 0 7px', borderRadius: 'var(--radius-md)', border: '1px solid transparent', background: this.state.orgMenuOpen ? 'var(--surface-hover)' : 'transparent', cursor: 'pointer', transition: 'background var(--dur-fast)' } },
         this.orgTile(org, 24),
-        h('div', { style: { textAlign: 'left', lineHeight: 1.15 } },
-          h('div', { style: { font: '600 13px/1.15 Sora, sans-serif', color: 'var(--text-strong)' } }, org.name),
+        this.state.vw >= 520 && h('div', { style: { textAlign: 'left', lineHeight: 1.15, minWidth: 0, overflow: 'hidden' } },
+          h('div', { style: { font: '600 13px/1.15 Sora, sans-serif', color: 'var(--text-strong)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 150 } }, org.name),
           h('div', { style: { font: '500 11px/1.15 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, org.role + ' \u00b7 ' + org.plan)),
         h(Icon, { n: 'chevrons-up-down', s: 14, color: 'var(--text-muted)' })),
       this.state.orgMenuOpen && this.dropdown(280, [
@@ -525,7 +545,7 @@ class Component extends DCLogic {
     ]);
   }
 
-  sidebar() {
+  sidebar(inDrawer) {
     const org = this.org();
     const st = org.storage;
     const items = [
@@ -537,7 +557,7 @@ class Component extends DCLogic {
       { id: 'billing', icon: 'credit-card', label: 'Billing' },
       { id: 'settings', icon: 'settings', label: 'Settings' },
     ];
-    return h('div', { style: { width: 244, flex: 'none', display: 'flex', flexDirection: 'column', background: 'var(--bg-panel)', borderRight: '1px solid var(--hairline)' } },
+    return h('div', { style: { width: 244, height: inDrawer ? '100%' : undefined, flex: 'none', display: 'flex', flexDirection: 'column', background: 'var(--bg-panel)', borderRight: '1px solid var(--hairline)' } },
       h('div', { style: { padding: '12px 12px 10px' } },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 9, padding: '8px 9px', borderRadius: 'var(--radius-md)', background: 'var(--surface-card)', border: '1px solid var(--border-subtle)' } },
           this.orgTile(org, 28),
@@ -584,14 +604,15 @@ class Component extends DCLogic {
   }
 
   pageHead(title, sub, actions) {
-    return h('div', { style: { display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, marginBottom: 22 } },
-      h('div', null,
-        h('div', { style: { font: '700 23px/1.2 Sora, sans-serif', letterSpacing: '-0.02em', color: 'var(--text-strong)' } }, title),
+    const narrow = this.narrow();
+    return h('div', { style: { display: 'flex', flexDirection: narrow ? 'column' : 'row', alignItems: narrow ? 'stretch' : 'flex-end', justifyContent: 'space-between', gap: narrow ? 12 : 16, marginBottom: narrow ? 18 : 22 } },
+      h('div', { style: { minWidth: 0 } },
+        h('div', { style: { font: (narrow ? '700 20px/1.2' : '700 23px/1.2') + ' Sora, sans-serif', letterSpacing: '-0.02em', color: 'var(--text-strong)' } }, title),
         sub && h('div', { style: { font: '400 13.5px/1.4 Sora, sans-serif', color: 'var(--text-muted)', marginTop: 6 } }, sub)),
-      actions && h('div', { style: { display: 'flex', gap: 10, flex: 'none' } }, actions));
+      actions && h('div', { style: { display: 'flex', gap: 10, flex: 'none', flexWrap: 'wrap' } }, actions));
   }
   pageWrap(children, max = 980) {
-    return h('div', { style: { padding: '28px 32px 64px', maxWidth: max, margin: '0 auto' } }, children);
+    return h('div', { style: { padding: this.narrow() ? '18px 14px 56px' : '28px 32px 64px', maxWidth: max, margin: '0 auto' } }, children);
   }
   sectionLabel(t) {
     return h('div', { style: { font: '600 10px/1 "Spline Sans Mono", monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 12 } }, t);
@@ -633,12 +654,12 @@ class Component extends DCLogic {
     return this.pageWrap([
       this.pageHead('Overview', 'How ' + org.name + ' is doing right now.', null),
       storageCard,
-      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginTop: 14 } },
+      h('div', { style: { display: 'grid', gridTemplateColumns: this.narrow() ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: 12, marginTop: 14 } },
         h(StatBlock, { label: 'Seats used', value: seats, unit: '/ ' + total, accent: true, hint: (total - seats) + ' available' }),
         h(StatBlock, { label: 'Repositories', value: org.repos.length, hint: org.repos.reduce((a, r) => a + r.blobs, 0).toLocaleString() + ' blobs' }),
         h(StatBlock, { label: 'Stored', value: st.connected ? st.storedGB : '\u2014', unit: st.connected ? 'GB' : null, hint: st.connected ? 'in your bucket' : 'connect storage' }),
         h(StatBlock, { label: 'Est. spend', value: '$' + (seats * org.seatPrice), unit: '/mo', delta: st.connected ? '+ ~$6 storage' : null, deltaTone: 'neutral', hint: 'seats \u00d7 $' + org.seatPrice })),
-      h('div', { style: { display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 14, marginTop: 14, alignItems: 'start' } },
+      h('div', { style: { display: 'grid', gridTemplateColumns: this.narrow() ? '1fr' : '1.5fr 1fr', gap: 14, marginTop: 14, alignItems: 'start' } },
         h(Card, { pad: 'none' },
           h('div', { style: { padding: '14px 18px', borderBottom: '1px solid var(--hairline)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
             h('span', { style: { font: '600 14px/1 Sora, sans-serif', color: 'var(--text-strong)' } }, 'Recent activity'),
@@ -715,7 +736,7 @@ class Component extends DCLogic {
           'They\u2019re used here to mint short-lived presigned URLs and stored encrypted at rest. Lockstep keeps pointers \u2014 never your asset bytes.')),
       h(Card, { pad: 'lg' },
         this.sectionLabel('Provider'),
-        h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10 } },
+        h('div', { style: { display: 'grid', gridTemplateColumns: this.narrow() ? 'repeat(2,1fr)' : 'repeat(5,1fr)', gap: 10 } },
           Object.entries(PROVIDERS).map(([key, p]) => {
             const sel = d.provider === key;
             return h('button', { key, onClick: () => this.pickProvider(key),
@@ -766,7 +787,7 @@ class Component extends DCLogic {
         h('span', { style: { font: '600 14px/1 Sora, sans-serif', color: 'var(--text-strong)' } }, 'Connected to your ' + PROVIDERS[st.provider].label + ' bucket'),
         h('span', { style: { flex: 1 } }),
         h('span', { style: { font: '500 12px/1 "Spline Sans Mono", monospace', color: 'var(--status-synced)' } }, 'last checked 2m ago')),
-      h('div', { style: { display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 14, alignItems: 'start' } },
+      h('div', { style: { display: 'grid', gridTemplateColumns: this.narrow() ? '1fr' : '1.1fr 1fr', gap: 14, alignItems: 'start' } },
         h(Card, { pad: 'lg' },
           this.sectionLabel('Connection \u00b7 masked'),
           row('Provider', PROVIDERS[st.provider].label, false),
@@ -789,10 +810,10 @@ class Component extends DCLogic {
               h('div', { key: i, style: { display: 'flex', gap: 9, padding: '7px 0' } },
                 h(Icon, { n: 'check', s: 15, color: 'var(--status-synced)', style: { marginTop: 1, flex: 'none' } }),
                 h('div', null, h('div', { style: { font: '600 12.5px/1.3 Sora, sans-serif', color: 'var(--text-body)' } }, t), h('div', { style: { font: '400 11.5px/1.4 Sora, sans-serif', color: 'var(--text-muted)' } }, s))))),
-          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } },
+          h('div', { style: { display: 'grid', gridTemplateColumns: this.narrow() ? '1fr' : '1fr 1fr', gap: 12 } },
             h(StatBlock, { label: 'Est. storage', value: estDisp, unit: '/mo', accent: true, hint: st.storedGB + ' GB at-rest' }),
             h(StatBlock, { label: 'Egress billed', value: '$0', hint: 'bytes skip the server' })))),
-      h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 14, alignItems: 'start' } },
+      h('div', { style: { display: 'grid', gridTemplateColumns: this.narrow() ? '1fr' : '1fr 1fr', gap: 14, marginTop: 14, alignItems: 'start' } },
         h(Card, { pad: 'lg' },
           h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 16 } }, this.sectionLabel('Usage by repository'), h('span', { style: { font: '600 13px/1 "Spline Sans Mono", monospace', color: 'var(--text-strong)' } }, st.storedGB + ' GB')),
           (folders.length === 0) && h('div', { style: { padding: '18px 4px 6px', font: '400 13px/1.5 Sora, sans-serif', color: 'var(--text-muted)' } }, 'No assets yet — push a commit and usage appears here.'),
@@ -820,7 +841,7 @@ class Component extends DCLogic {
     const seats = org.members.length, total = org.seatsTotal;
     const emailValid = /.+@.+\..+/.test(this.state.inviteEmail);
 
-    const memberRow = (m, i) => h('div', { key: m.email, style: { display: 'grid', gridTemplateColumns: '1fr 150px 40px', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: i < org.members.length - 1 ? '1px solid var(--hairline)' : 'none' } },
+    const memberRow = (m, i) => h('div', { key: m.email, style: { display: 'grid', gridTemplateColumns: this.narrow() ? '1fr 92px 30px' : '1fr 150px 40px', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: i < org.members.length - 1 ? '1px solid var(--hairline)' : 'none' } },
       h('div', { style: { display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 } },
         h(Avatar, { name: m.you ? 'You Me' : m.name, size: 32, ring: m.you }),
         h('div', { style: { minWidth: 0 } },
@@ -860,7 +881,7 @@ class Component extends DCLogic {
             this.iconBtn('x', () => this.setState({ lastInvite: null }), 'Dismiss')))),
       org.invites.length > 0 && h('div', { style: { marginTop: 22 } },
         this.sectionLabel('Pending invites \u00b7 ' + org.invites.length),
-        h(Card, { pad: 'none' }, org.invites.map((iv, i) => h('div', { key: iv.email, style: { display: 'grid', gridTemplateColumns: '1fr 150px 40px', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: i < org.invites.length - 1 ? '1px solid var(--hairline)' : 'none' } },
+        h(Card, { pad: 'none' }, org.invites.map((iv, i) => h('div', { key: iv.email, style: { display: 'grid', gridTemplateColumns: this.narrow() ? '1fr 92px 30px' : '1fr 150px 40px', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: i < org.invites.length - 1 ? '1px solid var(--hairline)' : 'none' } },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 } },
             h('span', { style: { width: 32, height: 32, borderRadius: '50%', border: '1.5px dashed var(--border-strong)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', flex: 'none' } }, h(Icon, { n: 'mail', s: 15 })),
             h('div', { style: { minWidth: 0 } },
@@ -904,19 +925,19 @@ class Component extends DCLogic {
       org.repos.length === 0
         ? this.emptyState('box', 'No repositories yet', 'Create your first repo, then clone it with the snippet we generate.', 'New repository', () => this.setState({ confirm: { create: true }, newOrgName: '' }))
         : h(Card, { pad: 'none' },
-          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 90px 90px 120px 28px', gap: 12, padding: '10px 18px', borderBottom: '1px solid var(--hairline)', font: '600 10px/1 "Spline Sans Mono", monospace', letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-muted)' } },
-            h('span', null, 'Repository'), h('span', { style: { textAlign: 'right' } }, 'Size'), h('span', { style: { textAlign: 'right' } }, 'Locks'), h('span', { style: { textAlign: 'right' } }, 'Activity'), h('span')),
+          h('div', { style: { display: 'grid', gridTemplateColumns: this.narrow() ? '1fr auto 28px' : '1fr 90px 90px 120px 28px', gap: 12, padding: '10px 18px', borderBottom: '1px solid var(--hairline)', font: '600 10px/1 "Spline Sans Mono", monospace', letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-muted)' } },
+            h('span', null, 'Repository'), h('span', { style: { textAlign: 'right' } }, 'Size'), !this.narrow() && h('span', { style: { textAlign: 'right' } }, 'Locks'), !this.narrow() && h('span', { style: { textAlign: 'right' } }, 'Activity'), h('span')),
           org.repos.map((r, i) => h('button', { key: r.slug, onClick: () => this.setState({ repoOpen: r.slug }),
             onMouseEnter: e => e.currentTarget.style.background = 'var(--surface-hover)', onMouseLeave: e => e.currentTarget.style.background = 'transparent',
-            style: { display: 'grid', gridTemplateColumns: '1fr 90px 90px 120px 28px', gap: 12, alignItems: 'center', width: '100%', padding: '13px 18px', border: 'none', borderBottom: i < org.repos.length - 1 ? '1px solid var(--hairline)' : 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' } },
+            style: { display: 'grid', gridTemplateColumns: this.narrow() ? '1fr auto 28px' : '1fr 90px 90px 120px 28px', gap: 12, alignItems: 'center', width: '100%', padding: '13px 18px', border: 'none', borderBottom: i < org.repos.length - 1 ? '1px solid var(--hairline)' : 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' } },
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 } },
               h('span', { style: { width: 30, height: 30, flex: 'none', borderRadius: 8, background: 'color-mix(in srgb, var(--amber-400) 14%, var(--surface-sunken))', color: 'var(--amber-400)', display: 'flex', alignItems: 'center', justifyContent: 'center' } }, h(Icon, { n: 'box', s: 16 })),
               h('div', { style: { minWidth: 0 } },
                 h('div', { style: { font: '600 13.5px/1.2 Sora, sans-serif', color: 'var(--text-strong)' } }, r.name),
                 h('div', { style: { font: '500 11px/1.2 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, 'git \u00b7 ' + r.branch))),
             h('span', { style: { textAlign: 'right', font: '600 12.5px/1 "Spline Sans Mono", monospace', color: 'var(--text-body)' } }, r.sizeGB + ' GB'),
-            h('span', { style: { textAlign: 'right' } }, r.locks > 0 ? h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 4, font: '600 12px/1 "Spline Sans Mono", monospace', color: 'var(--status-locked)' } }, h(Icon, { n: 'lock', s: 12 }), r.locks) : h('span', { style: { font: '500 12px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, '\u2014')),
-            h('span', { style: { textAlign: 'right', font: '500 11.5px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, r.activity),
+            !this.narrow() && h('span', { style: { textAlign: 'right' } }, r.locks > 0 ? h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 4, font: '600 12px/1 "Spline Sans Mono", monospace', color: 'var(--status-locked)' } }, h(Icon, { n: 'lock', s: 12 }), r.locks) : h('span', { style: { font: '500 12px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, '\u2014')),
+            !this.narrow() && h('span', { style: { textAlign: 'right', font: '500 11.5px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, r.activity),
             h(Icon, { n: 'chevron-right', s: 16, color: 'var(--text-muted)' }))))
     ]);
   }
@@ -954,12 +975,12 @@ class Component extends DCLogic {
           h('span', { style: { font: '500 11.5px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, 'read-only \u00b7 ' + r.lockList.length + ' active')),
         r.lockList.length === 0
           ? h('div', { style: { padding: '28px 18px', textAlign: 'center', font: '400 13px/1.4 Sora, sans-serif', color: 'var(--text-muted)' } }, 'No active locks. Files are free to check out.')
-          : r.lockList.map((l, i) => h('div', { key: l.path, style: { display: 'grid', gridTemplateColumns: '1fr 170px 110px', gap: 12, alignItems: 'center', padding: '11px 18px', borderBottom: i < r.lockList.length - 1 ? '1px solid var(--hairline)' : 'none' } },
+          : r.lockList.map((l, i) => h('div', { key: l.path, style: { display: 'grid', gridTemplateColumns: this.narrow() ? '1fr auto' : '1fr 170px 110px', gap: 12, alignItems: 'center', padding: '11px 18px', borderBottom: i < r.lockList.length - 1 ? '1px solid var(--hairline)' : 'none' } },
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 } },
               h(Icon, { n: 'lock', s: 14, color: l.state === 'mine' ? 'var(--status-mine)' : 'var(--status-locked)' }),
               h('span', { style: { font: '500 12.5px/1.3 "Spline Sans Mono", monospace', color: 'var(--text-body)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, l.path)),
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } }, h(Avatar, { name: l.owner === 'You' ? 'You Me' : l.owner, size: 22, ring: l.state === 'mine' }), h('span', { style: { font: '500 12.5px/1 Sora, sans-serif', color: l.state === 'mine' ? 'var(--status-mine)' : 'var(--text-secondary)' } }, l.owner)),
-            h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 } }, h('span', { style: { font: '500 12px/1 "Spline Sans Mono", monospace', color: l.stale ? 'var(--status-conflict)' : 'var(--text-muted)' } }, l.age), l.stale && h(Badge, { tone: 'red' }, 'stale'))))),
+            !this.narrow() && h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 } }, h('span', { style: { font: '500 12px/1 "Spline Sans Mono", monospace', color: l.stale ? 'var(--status-conflict)' : 'var(--text-muted)' } }, l.age), l.stale && h(Badge, { tone: 'red' }, 'stale'))))),
       h('div', { style: { borderRadius: 'var(--radius-lg)', border: '1px solid color-mix(in srgb, var(--status-conflict) 32%, var(--border-subtle))', background: 'color-mix(in srgb, var(--status-conflict) 5%, var(--surface-card))', padding: 18 } },
         h('div', { style: { font: '600 13px/1 Sora, sans-serif', color: 'var(--status-conflict)', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 7 } }, h(Icon, { n: 'triangle-alert', s: 15 }), 'Danger zone'),
         [['Archive repository', 'Make read-only. Locks release; history & blobs are kept.', 'Archive', false], ['Delete repository', 'Permanently remove git history and all blob pointers. Bytes stay in your bucket.', 'Delete', true]].map(([t, s, btn, danger], i) =>
@@ -1021,7 +1042,7 @@ class Component extends DCLogic {
           h('div', null,
             h('div', { style: { font: '600 14px/1.4 Sora, sans-serif', color: 'var(--text-strong)' } }, 'Billing isn\u2019t switched on yet'),
             h('div', { style: { font: '400 13px/1.5 Sora, sans-serif', color: 'var(--text-secondary)', marginTop: 4 } }, 'Connect a Polar account (product + token + webhook) to charge for seats. Until then everyone is on the free tier (' + (b.freeSeats || 5) + ' seats included).')))),
-      h('div', { style: { display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 14, alignItems: 'start' } },
+      h('div', { style: { display: 'grid', gridTemplateColumns: this.narrow() ? '1fr' : '1.3fr 1fr', gap: 14, alignItems: 'start' } },
         h(Card, { pad: 'lg' },
           h('div', { style: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18 } },
             h('div', null, this.sectionLabel('Current plan'),
