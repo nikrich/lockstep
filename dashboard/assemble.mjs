@@ -69,7 +69,7 @@ const patches = [
   [
     `codeBlock('Install + commit', 'git lfs install\\ngit add .lfsconfig && git commit -m "Use Lockstep for LFS"')),`,
     `codeBlock('Install + commit', 'git lfs install\\ngit add .lfsconfig && git commit -m "Use Lockstep for LFS"'),
-        h(Button, { variant: 'secondary', size: 'sm', iconLeft: h(Icon, { n: 'download', s: 14 }), style: { marginTop: 12 }, onClick: () => window.open('https://github.com/nikrich/lockstep/releases/download/ue-plugin-v0.2.0/LockstepSourceControl-UE5.7-Win64.zip', '_blank') }, 'Download Unreal plugin (UE 5.7, Win64)')),`,
+        h(Button, { variant: 'secondary', size: 'sm', iconLeft: h(Icon, { n: 'download', s: 14 }), style: { marginTop: 12 }, onClick: () => window.open('https://github.com/nikrich/lockstep/releases/tag/ue-plugin-v0.2.0', '_blank') }, 'Download Unreal plugin')),`,
   ],
 ];
 for (const [find, repl] of patches) {
