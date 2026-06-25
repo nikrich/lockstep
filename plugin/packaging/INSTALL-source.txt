@@ -1,0 +1,28 @@
+Lockstep Source Control — Unreal Engine plugin (SOURCE package, any platform)
+=============================================================================
+
+This is the source distribution. It has NO prebuilt binaries — the Unreal
+Editor compiles it the first time you open your project. Use this on macOS or
+Linux (or Windows if you prefer to build it yourself).
+
+Requirements: a C++ toolchain for your platform (Windows: Visual Studio;
+macOS: Xcode; Linux: clang/build-essential) — i.e. the same setup needed to
+build a UE C++ project. Plus git + git-lfs on PATH.
+
+INSTALL
+-------
+1. Close the Unreal Editor.
+2. Copy this "LockstepSourceControl" folder into your project's "Plugins"
+   folder:  <YourProject>/Plugins/LockstepSourceControl/
+3. Reopen the project. When prompted "missing modules — rebuild?", click Yes.
+   (If your project is Blueprint-only, right-click the .uproject ->
+   "Generate Visual Studio/Xcode project files" first, or add a dummy C++
+   class so the editor can compile the plugin.)
+
+ENABLE / CONNECT / USE
+----------------------
+Same as the prebuilt build: Edit -> Plugins -> enable "Lockstep"; then
+Revision Control -> Connect -> Provider: Lockstep -> Server URL ->
+"Sign in to Lockstep". See https://github.com/nikrich/lockstep for full docs.
+
+License: Business Source License 1.1 (free under USD $1M/yr revenue).
