@@ -28,19 +28,28 @@ interface CheckoutOpts {
 export async function createCheckout(env: Env, opts: CheckoutOpts): Promise<{ url: string; id: string }> {
   if (!billingConfigured(env)) throw new Error("billing is not configured");
 
-  const body: Record<string, unknown> = {
-    products: [env.POLAR_PRODUCT_ID],
-    success_url: opts.successUrl,
-    metadata: { org_id: opts.orgId },
+  const post = (withSeats: boolean) => {
+    const body: Record<string, unknown> = {
+      products: [env.POLAR_PRODUCT_ID],
+      success_url: opts.successUrl,
+      metadata: { org_id: opts.orgId },
+    };
+    if (opts.email) body.customer_email = opts.email;
+    if (withSeats && opts.seats && opts.seats > 0) body.seats = Math.min(1000, Math.max(1, opts.seats));
+    return fetch(`${apiBase(env)}/v1/checkouts/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${env.POLAR_ACCESS_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
   };
-  if (opts.email) body.customer_email = opts.email;
-  if (opts.seats && opts.seats > 0) body.seats = Math.min(1000, Math.max(1, opts.seats));
 
-  const res = await fetch(`${apiBase(env)}/v1/checkouts/`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${env.POLAR_ACCESS_TOKEN}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  let res = await post(true);
+  // A non-seat-based product rejects `seats` (422); fall back to a flat checkout.
+  if (res.status === 422) {
+    const detail = await res.text();
+    if (!detail.toLowerCase().includes("seat")) throw new Error(`polar checkout failed: 422 ${detail}`);
+    res = await post(false);
+  }
   if (!res.ok) throw new Error(`polar checkout failed: ${res.status} ${await res.text()}`);
   const j = (await res.json()) as { id: string; url: string };
   return { url: j.url, id: j.id };
@@ -82,21 +91,38 @@ export async function verifyWebhook(
   const ts = parseInt(timestamp, 10);
   if (!Number.isFinite(ts) || Math.abs(Math.floor(Date.now() / 1000) - ts) > 300) return false;
 
-  const rawSecret = secret.startsWith("whsec_") ? secret.slice(6) : secret;
-  let keyBytes: Uint8Array;
-  try {
-    keyBytes = fromB64(rawSecret);
-  } catch {
-    keyBytes = new TextEncoder().encode(secret);
+  // Provided signatures (header is a space-delimited list of "v1,<base64sig>").
+  const provided = signature
+    .split(" ")
+    .map((p) => (p.includes(",") ? p.split(",")[1] : p))
+    .filter((s): s is string => !!s);
+  const signedContent = `${id}.${timestamp}.${rawBody}`;
+
+  // Polar derives the HMAC key from the UTF-8 bytes of the WHOLE secret string
+  // (e.g. "polar_whs_…"); svix-native secrets are "whsec_<base64>". Accept any.
+  for (const keyBytes of candidateKeys(secret)) {
+    const key = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(signedContent));
+    const expected = toB64(mac);
+    if (provided.some((s) => s.length === expected.length && timingSafeEqual(s, expected))) return true;
   }
+  return false;
+}
 
-  const key = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${id}.${timestamp}.${rawBody}`));
-  const expected = toB64(mac);
-
-  // Header is a space-delimited list of "v1,<base64sig>" entries.
-  return signature.split(" ").some((part) => {
-    const sig = part.includes(",") ? part.split(",")[1] : part;
-    return !!sig && sig.length === expected.length && timingSafeEqual(sig, expected);
-  });
+function candidateKeys(secret: string): Uint8Array[] {
+  const keys: Uint8Array[] = [new TextEncoder().encode(secret)]; // Polar: utf-8 of the full secret
+  if (secret.startsWith("whsec_")) {
+    try {
+      keys.push(fromB64(secret.slice(6)));
+    } catch {
+      /* not base64 */
+    }
+  } else {
+    try {
+      keys.push(fromB64(secret));
+    } catch {
+      /* not base64 */
+    }
+  }
+  return keys;
 }

@@ -31,9 +31,9 @@ bucket_name = "lockstep-blobs"              # `wrangler r2 bucket create lockste
 BASE_URL = "https://api.lockstepcloud.com"
 DASHBOARD_URL = "https://app.lockstepcloud.com"
 
-# Polar (Merchant of Record) environment: "sandbox" while testing, flip to
-# "production" once your live Polar product + keys are set.
-POLAR_SERVER = "sandbox"
+# Polar (Merchant of Record) environment: "sandbox" or "production". Live keys
+# are configured, so this is production. Checkouts here are real charges.
+POLAR_SERVER = "production"
 
 # Secrets (set via `wrangler secret put <NAME>`, never commit):
 #   GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET
