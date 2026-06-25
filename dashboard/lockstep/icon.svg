@@ -1,0 +1,19 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Lockstep">
+  <defs>
+    <linearGradient id="amber" x1="96" y1="48" x2="416" y2="472" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffce6e"/>
+      <stop offset="1" stop-color="#ffb224"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="256" y1="0" x2="256" y2="300" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#amber)"/>
+  <rect width="512" height="512" rx="116" fill="url(#sheen)"/>
+  <!-- keyhole (matches the wordmark mark) -->
+  <g fill="#1a1206">
+    <circle cx="256" cy="222" r="74"/>
+    <rect x="228" y="216" width="56" height="150" rx="22"/>
+  </g>
+</svg>

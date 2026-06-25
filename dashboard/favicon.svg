@@ -1,0 +1,11 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Lockstep">
+  <defs>
+    <linearGradient id="a" x1="6" y1="3" x2="26" y2="29" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffce6e"/>
+      <stop offset="1" stop-color="#ffb224"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="7.5" fill="url(#a)"/>
+  <circle cx="16" cy="13.8" r="4.7" fill="#1a1206"/>
+  <rect x="13.6" y="13.4" width="4.8" height="9.8" rx="2.4" fill="#1a1206"/>
+</svg>
