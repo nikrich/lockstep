@@ -1,0 +1,61 @@
+name: UE Plugin Release
+
+# Builds the prebuilt (binary) Unreal plugin and attaches the zip to the GitHub
+# release for the tag. Building a UE plugin needs Unreal Engine on the runner,
+# so this requires a SELF-HOSTED WINDOWS runner with UE 5.7 installed (see below).
+#
+# Trigger:
+#   - push a tag like `ue-plugin-v0.3.0`  (recommended), or
+#   - run manually (workflow_dispatch) and pass the tag.
+#
+# Runner setup (one time):
+#   Repo Settings -> Actions -> Runners -> New self-hosted runner (Windows).
+#   Give it the labels:  self-hosted, windows, unreal-5.7
+#   It needs: UE 5.7 installed, plus git + git-lfs on PATH.
+#   If UE isn't at "C:\Program Files\Epic Games\UE_5.7", set a repo *variable*
+#   UE_5_7_ROOT (Settings -> Secrets and variables -> Actions -> Variables).
+
+on:
+  push:
+    tags:
+      - 'ue-plugin-v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to build & attach (e.g. ue-plugin-v0.3.0)'
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ue-plugin-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: [self-hosted, windows, unreal-5.7]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve tag
+        id: tag
+        shell: powershell
+        run: |
+          $t = if ('${{ github.event_name }}' -eq 'workflow_dispatch') { '${{ github.event.inputs.tag }}' } else { '${{ github.ref_name }}' }
+          [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "tag=$t`n")
+          Write-Host "Packaging plugin for $t"
+
+      - name: Package plugin (RunUAT BuildPlugin + stage + zip)
+        shell: powershell
+        env:
+          UE_5_7_ROOT: ${{ vars.UE_5_7_ROOT }}
+        run: ./plugin/packaging/package-plugin.ps1 -OutDir "${{ github.workspace }}/dist"
+
+      - name: Attach zip to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          files: dist/LockstepSourceControl-UE5.7-Win64.zip
+          fail_on_unmatched_files: true
+          generate_release_notes: true

@@ -1,0 +1,41 @@
+Lockstep Source Control — Unreal Engine plugin (prebuilt for UE 5.7, Win64)
+===========================================================================
+
+INSTALL
+-------
+1. Close the Unreal Editor.
+2. Copy this "LockstepSourceControl" folder into your project's "Plugins"
+   folder, so you end up with:
+       <YourProject>/Plugins/LockstepSourceControl/
+   (Create the "Plugins" folder if it doesn't exist.)
+3. Reopen your project. If prompted to rebuild missing modules, click Yes
+   (only needed if you are NOT on UE 5.7 — the bundled binaries are 5.7/Win64;
+   the included Source lets other versions recompile).
+
+ENABLE
+------
+Edit -> Plugins -> search "Lockstep" (category: Source Control) -> ensure it's
+enabled -> restart if asked.
+
+CONNECT
+-------
+1. Your UE project must already be a git working copy, with the .gitattributes
+   (lockable binary types) and .lfsconfig from the Lockstep dashboard committed
+   at its root.
+2. Revision Control (bottom-right) -> Connect -> Provider: Lockstep.
+3. Paste your Server URL (the same value as lfs.url in .lfsconfig,
+   e.g. https://api.lockstepcloud.com/your-repo).
+4. Click "Sign in to Lockstep" — your browser opens, you authorize with
+   GitHub/Google, and you're returned automatically. The access token is stored
+   securely in the Windows Credential Manager (no env vars, no copy-paste).
+   (CI/headless: set the LOCKSTEP_TOKEN environment variable instead.)
+5. Accept Settings -> Connect.
+
+USE
+---
+Right-click a binary asset (.uasset/.umap/.fbx) -> Revision Control -> Check Out
+to acquire an exclusive lock. Submit to commit + push and release the lock.
+See https://github.com/nikrich/lockstep for full docs.
+
+Requires: git and git-lfs installed and on PATH.
+License: Business Source License 1.1 (free under USD $1M/yr revenue).
