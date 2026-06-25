@@ -37,19 +37,22 @@ dc = dc.replace(
 
 // Wiring patches. Each must hit exactly one known anchor in the design source;
 // a missed anchor throws so we never ship a silently-unwired build.
-// Cache-bust api.js by content hash so dashboard updates aren't served stale.
-const apiHash = crypto
-  .createHash("md5")
-  .update(fs.readFileSync(path.join(dir, "api.js")))
-  .digest("hex")
-  .slice(0, 8);
+// Cache-bust local scripts by content hash so dashboard updates aren't served
+// stale — critical: support.js pins which React/icon URLs the page loads, so a
+// stale cached copy keeps pulling them from unpkg (the slow-load bug).
+const ver = (file) =>
+  "?v=" +
+  crypto.createHash("md5").update(fs.readFileSync(path.join(dir, file))).digest("hex").slice(0, 8);
 
 const patches = [
-  // load api.js (content-hashed) before the runtime boots
+  // load api.js (content-hashed) before the runtime boots, and version support.js
   [
     '<script src="./support.js"></script>',
-    `<script src="api.js?v=${apiHash}"></script>\n<script src="./support.js"></script>`,
+    `<script src="api.js${ver("api.js")}"></script>\n<script src="./support.js${ver("support.js")}"></script>`,
   ],
+  // version the design-system bundle + icon lib as well
+  ['<script src="ds-bundle.js"></script>', `<script src="ds-bundle.js${ver("ds-bundle.js")}"></script>`],
+  ['<script src="./lucide.min.js"></script>', `<script src="./lucide.min.js${ver("lucide.min.js")}"></script>`],
   // once the design system is ready, replace mock orgs with live data
   [
     "if (ns && ns.Button && window.lucide) { this.D = ns; this.setState({ ready: true }); }",
