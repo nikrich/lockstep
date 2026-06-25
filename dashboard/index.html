@@ -8,7 +8,7 @@
 <link rel="alternate icon" type="image/png" sizes="32x32" href="/favicon-32.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="icon" href="/favicon.ico" sizes="any">
-<script src="api.js?v=754d7bdf"></script>
+<script src="api.js?v=42137031"></script>
 <script src="./support.js?v=f08a61cd"></script>
 </head>
 <body>
@@ -1021,7 +1021,8 @@ class Component extends DCLogic {
     const canManage = b.canManage || org.role === 'Owner' || org.role === 'Admin';
     const seatsUsed = b.seatsUsed != null ? b.seatsUsed : org.members.length;
     const seatPrice = b.seatPrice || org.seatPrice || 12;
-    const billedSeats = b.active ? Math.max(b.seatsPaid || 0, seatsUsed) : seatsUsed;
+    const freeSeats = b.freeSeats || 1;
+    const billedSeats = b.active ? (b.seatsPaid || 0) : Math.max(0, seatsUsed - freeSeats);
     const monthly = billedSeats * seatPrice;
     const money = (n) => '$' + (Math.round(n * 100) / 100).toFixed(2);
     const statusTone = b.active ? 'green' : (b.status === 'past_due' || b.status === 'canceled' ? 'red' : 'neutral');
@@ -1042,7 +1043,7 @@ class Component extends DCLogic {
           h(Icon, { n: 'info', s: 18, color: 'var(--amber-400)', style: { flex: 'none', marginTop: 2 } }),
           h('div', null,
             h('div', { style: { font: '600 14px/1.4 Sora, sans-serif', color: 'var(--text-strong)' } }, 'Billing isn\u2019t switched on yet'),
-            h('div', { style: { font: '400 13px/1.5 Sora, sans-serif', color: 'var(--text-secondary)', marginTop: 4 } }, 'Connect a Polar account (product + token + webhook) to charge for seats. Until then everyone is on the free tier (' + (b.freeSeats || 5) + ' seats included).')))),
+            h('div', { style: { font: '400 13px/1.5 Sora, sans-serif', color: 'var(--text-secondary)', marginTop: 4 } }, 'Connect a Polar account (product + token + webhook) to charge for seats. Until then everyone is on the free tier (' + (b.freeSeats || 1) + ((b.freeSeats || 1) === 1 ? ' seat' : ' seats') + ' free).')))),
       h('div', { style: { display: 'grid', gridTemplateColumns: this.narrow() ? 'minmax(0, 1fr)' : '1.3fr 1fr', gap: 14, alignItems: 'start' } },
         h(Card, { pad: 'lg' },
           h('div', { style: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18 } },
@@ -1050,12 +1051,17 @@ class Component extends DCLogic {
               h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } }, h('span', { style: { font: '700 22px/1 Sora, sans-serif', color: 'var(--text-strong)' } }, b.active ? 'Pro' : 'Free'), h(Badge, { tone: statusTone, dot: true }, b.status || 'free'))),
             canManage && (b.active
               ? h(Button, { variant: 'secondary', size: 'sm', iconLeft: h(Icon, { n: 'external-link', s: 14 }), onClick: portal }, 'Manage billing')
-              : h(Button, { variant: 'primary', size: 'sm', disabled: !b.configured, iconLeft: h(Icon, { n: 'arrow-up-circle', s: 15 }), onClick: subscribe }, 'Subscribe'))),
+              : seatsUsed > freeSeats
+                ? h(Button, { variant: 'primary', size: 'sm', disabled: !b.configured, iconLeft: h(Icon, { n: 'arrow-up-circle', s: 15 }), onClick: subscribe }, 'Subscribe')
+                : h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6, font: '600 11px/1 "Spline Sans Mono", monospace', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--status-synced)' } }, h(Icon, { n: 'check', s: 14 }), 'On free tier'))),
           h('div', { style: { display: 'flex', alignItems: 'flex-end', gap: 6, padding: '16px 0', borderTop: '1px solid var(--hairline)', borderBottom: '1px solid var(--hairline)' } },
             h('span', { style: { font: '700 40px/1 Sora, sans-serif', color: 'var(--text-strong)', letterSpacing: '-0.02em' } }, money(monthly)),
             h('span', { style: { font: '500 14px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)', marginBottom: 6 } }, '/ mo')),
           h('div', { style: { display: 'flex', justifyContent: 'space-between', padding: '14px 0 4px', font: '400 13px/1.4 Sora, sans-serif', color: 'var(--text-secondary)' } },
-            h('span', null, billedSeats + ' seats \u00d7 ' + money(seatPrice) + ' / seat'), h('span', { style: { font: '600 13px/1 "Spline Sans Mono", monospace', color: 'var(--text-body)' } }, money(monthly))),
+            billedSeats === 0
+              ? h('span', null, seatsUsed + (seatsUsed === 1 ? ' seat' : ' seats') + ' \u00b7 within free tier (' + freeSeats + ' free)')
+              : h('span', null, billedSeats + ' billable \u00d7 ' + money(seatPrice) + ' / seat \u00b7 ' + freeSeats + ' free'),
+            h('span', { style: { font: '600 13px/1 "Spline Sans Mono", monospace', color: 'var(--text-body)' } }, money(monthly))),
           h('div', { style: { display: 'flex', justifyContent: 'space-between', padding: '8px 0', font: '400 13px/1.4 Sora, sans-serif', color: 'var(--text-secondary)' } },
             h('span', null, 'Storage (your own bucket)'), h('span', { style: { font: '600 13px/1 "Spline Sans Mono", monospace', color: 'var(--status-synced)' } }, org.storage.connected ? 'billed by provider' : 'not connected')),
           h('div', { style: { display: 'flex', gap: 8, marginTop: 14, padding: '12px 14px', borderRadius: 'var(--radius-md)', background: 'var(--status-synced-bg)', font: '400 12.5px/1.5 Sora, sans-serif', color: 'var(--text-secondary)' } }, h(Icon, { n: 'info', s: 15, color: 'var(--status-synced)', style: { flex: 'none', marginTop: 1 } }), h('span', null, h('b', { style: { color: 'var(--text-strong)', fontWeight: 600 } }, '$0 egress.'), ' Clones pull from your bucket directly \u2014 no per-clone bandwidth bill from Lockstep.'))),
@@ -1063,8 +1069,8 @@ class Component extends DCLogic {
           h(Card, { pad: 'lg' }, this.sectionLabel('Seats'),
             h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 8 } },
               h('span', { style: { font: '700 26px/1 Sora, sans-serif', color: 'var(--text-strong)' } }, seatsUsed),
-              h('span', { style: { font: '500 13px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, b.active ? ('/ ' + Math.max(b.seatsPaid || 0, seatsUsed) + ' paid') : ('/ ' + (b.freeSeats || 5) + ' free'))),
-            h('div', { style: { font: '400 12px/1.4 Sora, sans-serif', color: 'var(--text-muted)', marginTop: 6 } }, 'Every active member is one billed seat.')),
+              h('span', { style: { font: '500 13px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, b.active ? ('/ ' + ((b.seatsPaid || 0) + freeSeats) + ' seats') : ('/ ' + freeSeats + ' free'))),
+            h('div', { style: { font: '400 12px/1.4 Sora, sans-serif', color: 'var(--text-muted)', marginTop: 6 } }, 'First ' + freeSeats + (freeSeats === 1 ? ' seat is' : ' seats are') + ' free · ' + money(seatPrice) + ' / seat after.')),
           b.active
             ? h(StatBlock, { label: 'Renews', value: b.renewLabel || '\u2014', accent: true, hint: 'managed by Polar' })
             : h(Card, { pad: 'lg' }, this.sectionLabel('Merchant of Record'),

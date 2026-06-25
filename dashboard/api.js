@@ -78,7 +78,7 @@
     if (!s) return Object.assign({ connected: false, provider: "r2", endpoint: "", region: "auto", bucket: "", accessKeyId: "", secret: "", prefix: "" }, stats);
     return Object.assign({ connected: true, provider: s.provider || "r2", endpoint: s.endpoint || "", region: s.region || "auto", bucket: s.bucket || "", accessKeyId: s.accessKeyId || "", secret: "••••••••", prefix: s.prefix || "" }, stats);
   }
-  var FREE_SEATS = 5; // included seats until a paid plan raises the limit
+  var FREE_SEATS = 1; // included seats until a paid plan raises the limit
   function mapMembers(md, user) {
     var you = (md && md.you) || (user && user.id);
     var members = ((md && md.members) || []).map(function (m) {
@@ -95,7 +95,7 @@
     return {
       plan: bd.plan || "free", status: bd.status || "none", active: active,
       seatsPaid: bd.seatsPaid || 0, seatsUsed: bd.seatsUsed != null ? bd.seatsUsed : null,
-      freeSeats: bd.freeSeats || 5, seatPrice: bd.seatPrice || 12,
+      freeSeats: bd.freeSeats || 1, seatPrice: bd.seatPrice || 3.99,
       currentPeriodEnd: bd.currentPeriodEnd || null, renewLabel: bd.currentPeriodEnd ? dateFmt(bd.currentPeriodEnd) : null,
       configured: !!bd.configured, hasCustomer: !!bd.hasCustomer, canManage: !!bd.canManage,
     };
