@@ -164,7 +164,7 @@ function seedOrgs() {
 class Component extends DCLogic {
   state = {
     ready: false,
-    theme: 'dark',
+    theme: (function () { try { return localStorage.getItem('ls_theme') || 'dark'; } catch (e) { return 'dark'; } })(),
     route: 'loading',
     orgId: 'aurora',
     orgs: seedOrgs(),
@@ -488,7 +488,7 @@ class Component extends DCLogic {
       { icon: 'box', label: 'Create repository', kind: 'Action', run: () => this.setState({ cmdOpen: false, nav: 'repos', confirm: { create: true }, newOrgName: '' }) },
       { icon: 'key-round', label: 'Generate access token', kind: 'Action', run: () => this.setState({ cmdOpen: false, nav: 'tokens', tokenModal: { step: 'form', name: '', scopes: { lock: true, read: true, write: true } } }) },
       { icon: 'database', label: 'Connect storage', kind: 'Action', run: () => { this.setState({ cmdOpen: false, nav: 'storage', storageEditing: true }); this.ensureDraft(); } },
-      { icon: this.state.theme === 'dark' ? 'sun' : 'moon', label: 'Toggle theme', kind: 'Action', run: () => this.setState(s => ({ cmdOpen: false, theme: s.theme === 'dark' ? 'light' : 'dark' })) },
+      { icon: this.state.theme === 'dark' ? 'sun' : 'moon', label: 'Toggle theme', kind: 'Action', run: () => this.setState(s => { const t = s.theme === 'dark' ? 'light' : 'dark'; try { localStorage.setItem('ls_theme', t); } catch (e) {} return { cmdOpen: false, theme: t }; }) },
       { icon: 'book-open', label: 'Open documentation', kind: 'Help', run: () => { this.setState({ cmdOpen: false }); window.open('https://github.com/nikrich/lockstep#readme', '_blank'); } },
       { icon: 'life-buoy', label: 'Contact support', kind: 'Help', run: () => this.setState({ cmdOpen: false, helpOpen: true }) },
       { icon: 'log-out', label: 'Sign out', kind: 'Account', run: () => { this.setState({ cmdOpen: false }); if (window.LSAPI) window.LSAPI.logout().finally(() => this.setState({ route: 'signin' })); else this.setState({ route: 'signin' }); } },
@@ -590,7 +590,7 @@ class Component extends DCLogic {
   }
 
   themeToggle(style = {}) {
-    return h('button', { onClick: () => this.setState(s => ({ theme: s.theme === 'dark' ? 'light' : 'dark' })), title: 'Toggle theme',
+    return h('button', { onClick: () => this.setState(s => { const t = s.theme === 'dark' ? 'light' : 'dark'; try { localStorage.setItem('ls_theme', t); } catch (e) {} return { theme: t }; }), title: 'Toggle theme',
       onMouseEnter: e => e.currentTarget.style.background = 'var(--surface-hover)', onMouseLeave: e => e.currentTarget.style.background = 'transparent',
       style: { width: 34, height: 34, borderRadius: 'var(--radius-md)', border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', transition: 'background var(--dur-fast)', ...style } },
       h(Icon, { n: this.state.theme === 'dark' ? 'sun' : 'moon', s: 17 }));
