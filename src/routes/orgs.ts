@@ -47,6 +47,32 @@ app.post("/", async (c) => {
 // List orgs the caller is a member of (with their role + seat count).
 app.get("/", async (c) => {
   const { userId } = c.get("identity");
+
+  // Auto-claim any pending invites addressed to this user's verified email.
+  // Invites are keyed by email, so signing in with the invited address joins the
+  // org. This is the robust path: it doesn't depend on the invite-link token
+  // surviving the OAuth redirect (an in-memory/localStorage value can be lost).
+  const me = await c.env.DB.prepare("SELECT email FROM users WHERE id = ?")
+    .bind(userId)
+    .first<{ email: string | null }>();
+  if (me?.email) {
+    const { results: pending } = await c.env.DB.prepare(
+      "SELECT id, org_id, role FROM invites WHERE lower(email) = lower(?) AND expires_at > ?",
+    )
+      .bind(me.email, now())
+      .all<{ id: string; org_id: string; role: string }>();
+    if (pending.length) {
+      const stmts = pending.flatMap((inv) => [
+        c.env.DB.prepare(
+          `INSERT INTO org_members (org_id, user_id, role, seat_active, created_at)
+           VALUES (?, ?, ?, 1, ?) ON CONFLICT(org_id, user_id) DO NOTHING`,
+        ).bind(inv.org_id, userId, inv.role, now()),
+        c.env.DB.prepare("DELETE FROM invites WHERE id = ?").bind(inv.id),
+      ]);
+      await c.env.DB.batch(stmts);
+    }
+  }
+
   const { results } = await c.env.DB.prepare(
     `SELECT o.id, o.name, o.slug, o.plan, m.role,
             (SELECT COUNT(*) FROM org_members WHERE org_id = o.id AND seat_active = 1) AS seats
