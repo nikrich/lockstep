@@ -119,7 +119,7 @@
       id: o.id, name: o.name, slug: o.slug,
       role: ROLE[o.role] || "Member",
       plan: o.plan === "free" ? "Indie" : (o.plan || "Studio"),
-      seatPrice: mb.seatPrice, seatsTotal: mb.active ? Math.max(mb.seatsPaid, members.length) : Math.max(mb.freeSeats, members.length),
+      seatPrice: mb.seatPrice, seatsTotal: mb.active ? Math.max(mb.seatsPaid + mb.freeSeats, members.length) : Math.max(mb.freeSeats, members.length),
       storage: mapStorage(storage, usageData),
       members: members,
       invites: mm.invites,

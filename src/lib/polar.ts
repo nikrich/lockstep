@@ -89,13 +89,38 @@ export async function getSeatPriceCents(env: Env): Promise<number | null> {
   }
 }
 
+/**
+ * The owner member's id for a customer. Seat-based subscriptions make the buyer
+ * a "team customer", and a portal session for a team customer requires a
+ * member_id (Polar rejects with "member_id is required for team customers"
+ * otherwise). Returns null for plain individual customers (no members listed).
+ */
+async function ownerMemberId(env: Env, customerId: string): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `${apiBase(env)}/v1/members/?customer_id=${encodeURIComponent(customerId)}&limit=100`,
+      { headers: { Authorization: `Bearer ${env.POLAR_ACCESS_TOKEN}` } },
+    );
+    if (!res.ok) return null;
+    const j = (await res.json()) as { items?: Array<{ id: string; role?: string }> };
+    const items = j.items || [];
+    const owner = items.find((m) => m.role === "owner") || items[0];
+    return owner?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Create a customer-portal session so a customer can manage card + invoices. */
 export async function createPortalSession(env: Env, customerId: string): Promise<string> {
   if (!env.POLAR_ACCESS_TOKEN) throw new Error("billing is not configured");
+  const memberId = await ownerMemberId(env, customerId);
+  const body: Record<string, unknown> = { customer_id: customerId };
+  if (memberId) body.member_id = memberId; // required for team (seat-based) customers
   const res = await fetch(`${apiBase(env)}/v1/customer-sessions/`, {
     method: "POST",
     headers: { Authorization: `Bearer ${env.POLAR_ACCESS_TOKEN}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ customer_id: customerId }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`polar portal failed: ${res.status} ${await res.text()}`);
   const j = (await res.json()) as { customer_portal_url?: string };
