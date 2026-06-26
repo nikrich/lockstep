@@ -99,6 +99,8 @@
       plan: bd.plan || "free", status: bd.status || "none", active: active,
       seatsPaid: bd.seatsPaid || 0, seatsUsed: bd.seatsUsed != null ? bd.seatsUsed : null,
       freeSeats: bd.freeSeats || 1, seatPrice: bd.seatPrice || 3.99,
+      amountCents: bd.amountCents != null ? bd.amountCents : null, grossCents: bd.grossCents != null ? bd.grossCents : null,
+      currency: bd.currency || null, discountLabel: bd.discountLabel || null,
       currentPeriodEnd: bd.currentPeriodEnd || null, renewLabel: bd.currentPeriodEnd ? dateFmt(bd.currentPeriodEnd) : null,
       configured: !!bd.configured, hasCustomer: !!bd.hasCustomer, canManage: !!bd.canManage,
     };

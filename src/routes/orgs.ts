@@ -9,7 +9,13 @@ import { requireAuth } from "../lib/auth";
 import { uuid, aesEncrypt, randomId, sha256 } from "../lib/crypto";
 import { testConnection, usage } from "../lib/storage";
 import { orgRole } from "../lib/access";
-import { createCheckout, createPortalSession, billingConfigured, getSeatPriceCents } from "../lib/polar";
+import {
+  createCheckout,
+  createPortalSession,
+  billingConfigured,
+  getSeatPriceCents,
+  getSubscriptionAmount,
+} from "../lib/polar";
 
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 
@@ -431,7 +437,7 @@ app.get("/:orgId/billing", async (c) => {
   if (!role) return c.json({ message: "not a member" }, 403);
 
   const org = await c.env.DB.prepare(
-    "SELECT plan, subscription_status, seats_paid, current_period_end, polar_customer_id FROM orgs WHERE id = ?",
+    "SELECT plan, subscription_status, seats_paid, current_period_end, polar_customer_id, polar_subscription_id FROM orgs WHERE id = ?",
   )
     .bind(orgId)
     .first<{
@@ -440,10 +446,19 @@ app.get("/:orgId/billing", async (c) => {
       seats_paid: number | null;
       current_period_end: number | null;
       polar_customer_id: string | null;
+      polar_subscription_id: string | null;
     }>();
   const seatsUsed = await activeSeatCount(c.env, orgId);
   const seatCents = await getSeatPriceCents(c.env);
   const seatPrice = seatCents != null ? Math.round(seatCents) / 100 : SEAT_PRICE;
+
+  // Real recurring amount from Polar (reflects discounts/coupons). Falls back to
+  // the locally-computed estimate when there's no active subscription to read.
+  const active = org?.subscription_status === "active" || org?.subscription_status === "trialing";
+  const amt =
+    active && org?.polar_subscription_id
+      ? await getSubscriptionAmount(c.env, org.polar_subscription_id)
+      : null;
 
   return c.json({
     plan: org?.plan ?? "free",
@@ -452,6 +467,10 @@ app.get("/:orgId/billing", async (c) => {
     seatsUsed,
     freeSeats: FREE_SEATS,
     seatPrice,
+    amountCents: amt ? amt.netCents : null,
+    grossCents: amt ? amt.grossCents : null,
+    currency: amt ? amt.currency : null,
+    discountLabel: amt ? amt.discountLabel : null,
     currentPeriodEnd: org?.current_period_end ?? null,
     hasCustomer: !!org?.polar_customer_id,
     configured: billingConfigured(c.env),

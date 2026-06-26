@@ -111,6 +111,54 @@ async function ownerMemberId(env: Env, customerId: string): Promise<string | nul
   }
 }
 
+export interface SubscriptionAmount {
+  grossCents: number; // list price before any discount
+  netCents: number; // what the customer actually pays this period
+  currency: string;
+  discountLabel: string | null; // e.g. "100% off forever", null if no discount
+}
+
+/**
+ * The subscription's real recurring amount, with any Polar discount applied.
+ * The dashboard otherwise computes seats × price locally, which ignores
+ * discounts/coupons. `amount` from Polar is the gross (pre-discount) total;
+ * the `discount` object carries either basis_points (percentage) or a fixed
+ * amount. Returns null if it can't be fetched (caller falls back to the
+ * computed estimate).
+ */
+export async function getSubscriptionAmount(
+  env: Env,
+  subscriptionId: string,
+): Promise<SubscriptionAmount | null> {
+  if (!env.POLAR_ACCESS_TOKEN) return null;
+  try {
+    const res = await fetch(`${apiBase(env)}/v1/subscriptions/${subscriptionId}`, {
+      headers: { Authorization: `Bearer ${env.POLAR_ACCESS_TOKEN}` },
+    });
+    if (!res.ok) return null;
+    const s = (await res.json()) as {
+      amount?: number;
+      currency?: string;
+      discount?: { type?: string; duration?: string; basis_points?: number; amount?: number } | null;
+    };
+    const gross = s.amount ?? 0;
+    const d = s.discount || null;
+    let net = gross;
+    let label: string | null = null;
+    const forever = d?.duration === "forever" ? " forever" : "";
+    if (d && typeof d.basis_points === "number") {
+      net = Math.max(0, Math.round((gross * (10000 - d.basis_points)) / 10000));
+      label = `${d.basis_points / 100}% off${forever}`;
+    } else if (d && typeof d.amount === "number") {
+      net = Math.max(0, gross - d.amount);
+      label = `$${(d.amount / 100).toFixed(2)} off${forever}`;
+    }
+    return { grossCents: gross, netCents: net, currency: (s.currency || "usd").toUpperCase(), discountLabel: label };
+  } catch {
+    return null;
+  }
+}
+
 /** Create a customer-portal session so a customer can manage card + invoices. */
 export async function createPortalSession(env: Env, customerId: string): Promise<string> {
   if (!env.POLAR_ACCESS_TOKEN) throw new Error("billing is not configured");
