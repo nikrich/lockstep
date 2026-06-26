@@ -65,7 +65,7 @@ const faqData = [
   [`What storage can I use?`, `Any S3-compatible object store: Cloudflare R2, Backblaze B2, Wasabi, MinIO, or AWS S3. You configure one bucket path; we never copy your data elsewhere. R2 and B2 are the cheapest because they charge little-to-nothing for egress.`],
   [`Is my data safe? Who holds my keys?`, `You do. Bucket credentials are encrypted at rest, and clients only ever receive short-lived presigned URLs (typically a 15-minute TTL). Blob bytes travel client to bucket directly and never pass through the coordination server.`],
   [`Can I migrate from Perforce or Git LFS?`, `Yes. From Git LFS it is largely a remote swap — point LFS at your bucket and pull. From Perforce, import your latest depot state into a git repo and bring history forward as needed; locks map cleanly onto the Lockstep lock table.`],
-  [`What does fair-source mean?`, `The source is public and readable. It is free for individuals and studios under $1M/year in revenue. Each release is licensed under BSL 1.1 and automatically converts to Apache 2.0 four years after it ships — so you can never be locked out of the tool you depend on.`],
+  [`What does fair-source mean?`, `The source is public and readable. It is free for one seat, and for individuals and studios under $100k/year in revenue. Each release is licensed under BSL 1.1 and automatically converts to Apache 2.0 four years after it ships — so you can never be locked out of the tool you depend on.`],
   [`Do you support Unreal and Unity?`, `Unreal is the first-class target, with a native plugin for in-editor checkout, submit and lock (coming soon). Unity support follows via a package. The desktop app and CLI work with any engine or asset workflow today.`],
 ];
 const faqHtml = faqData
@@ -87,9 +87,9 @@ body = body.replace(/<sc-for list="\{\{ faqs \}\}"[\s\S]*?<\/sc-for>/, faqHtml);
 const defaults = {
   repoLabel: "100 GB", devsLabel: "8 devs",
   githubTotal: "$290", githubStorage: "$10", githubEgress: "$280",
-  providerName: "Cloudflare R2", lockTotal: "$74", lockStorage: "$1.50",
-  lockSeats: "$72", seatPrice: "9", multiple: "3.9×",
-  annualSaving: "$2,598", studioPrice: "9",
+  providerName: "Cloudflare R2", lockTotal: "$33", lockStorage: "$1.50",
+  lockSeats: "$32", seatPrice: "3.99", multiple: "8.7×",
+  annualSaving: "$3,079", studioPrice: "3.99",
 };
 for (const [k, v] of Object.entries(defaults)) {
   body = body.split(`{{ ${k} }}`).join(`<span class="ls-${k}">${v}</span>`);
@@ -104,7 +104,7 @@ const script = `<script>
   var state = { repoGB: 100, devs: 8, provider: 'r2' };
   var rates = { r2: 0.015, b2: 0.006, wasabi: 0.0068 };
   var names = { r2: 'Cloudflare R2', b2: 'Backblaze B2', wasabi: 'Wasabi' };
-  var SEAT = 9;
+  var SEAT = 3.99;
   function money(n) {
     if (n >= 1000) return '$' + Math.round(n).toLocaleString();
     if (n >= 100) return '$' + Math.round(n);
