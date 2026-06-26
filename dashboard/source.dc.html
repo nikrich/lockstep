@@ -1033,10 +1033,12 @@ class Component extends DCLogic {
     const monthly = billedSeats * seatPrice;
     const money = (n) => '$' + (Math.round(n * 100) / 100).toFixed(2);
     const statusTone = b.active ? 'green' : (b.status === 'past_due' || b.status === 'canceled' ? 'red' : 'neutral');
+    const buySeats = this.state.buySeats || 1;
+    const stepBtn = { width: 24, height: 24, border: 'none', background: 'transparent', color: 'var(--text-body)', cursor: 'pointer', font: '600 15px/1 Sora, sans-serif', borderRadius: 'var(--radius-sm)' };
     const subscribe = () => {
       if (!window.LSAPI) return this.flash('Billing not connected', 'locked');
       this.flash('Opening checkout\u2026', 'mine');
-      window.LSAPI.startCheckout(this.state.orgId).then(r => { if (r && r.url) window.location.href = r.url; }).catch(e => this.flash('Checkout failed: ' + e.message, 'conflict'));
+      window.LSAPI.startCheckout(this.state.orgId, this.state.buySeats || 1).then(r => { if (r && r.url) window.location.href = r.url; }).catch(e => this.flash('Checkout failed: ' + e.message, 'conflict'));
     };
     const portal = () => {
       if (!window.LSAPI) return;
@@ -1058,9 +1060,13 @@ class Component extends DCLogic {
               h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } }, h('span', { style: { font: '700 22px/1 Sora, sans-serif', color: 'var(--text-strong)' } }, b.active ? 'Pro' : 'Free'), h(Badge, { tone: statusTone, dot: true }, b.status || 'free'))),
             canManage && (b.active
               ? h(Button, { variant: 'secondary', size: 'sm', iconLeft: h(Icon, { n: 'external-link', s: 14 }), onClick: portal }, 'Manage billing')
-              : seatsUsed > freeSeats
-                ? h(Button, { variant: 'primary', size: 'sm', disabled: !b.configured, iconLeft: h(Icon, { n: 'arrow-up-circle', s: 15 }), onClick: subscribe }, 'Subscribe')
-                : h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6, font: '600 11px/1 "Spline Sans Mono", monospace', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--status-synced)' } }, h(Icon, { n: 'check', s: 14 }), 'On free tier'))),
+              : h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' } },
+                  h('div', { style: { display: 'flex', alignItems: 'center', gap: 2, padding: 2, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-default)', background: 'var(--surface-sunken)' } },
+                    h('button', { onClick: () => this.setState(s => ({ buySeats: Math.max(1, (s.buySeats || 1) - 1) })), style: stepBtn }, '−'),
+                    h('span', { style: { minWidth: 22, textAlign: 'center', font: '600 13px/1 "Spline Sans Mono", monospace', color: 'var(--text-strong)' } }, buySeats),
+                    h('button', { onClick: () => this.setState(s => ({ buySeats: (s.buySeats || 1) + 1 })), style: stepBtn }, '+')),
+                  h('span', { style: { font: '500 12px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, '× ' + money(seatPrice) + ' = ' + money(buySeats * seatPrice) + '/mo'),
+                  h(Button, { variant: 'primary', size: 'sm', disabled: !b.configured, iconLeft: h(Icon, { n: 'arrow-up-circle', s: 15 }), onClick: subscribe }, buySeats === 1 ? 'Buy a seat' : 'Buy ' + buySeats + ' seats')))),
           h('div', { style: { display: 'flex', alignItems: 'flex-end', gap: 6, padding: '16px 0', borderTop: '1px solid var(--hairline)', borderBottom: '1px solid var(--hairline)' } },
             h('span', { style: { font: '700 40px/1 Sora, sans-serif', color: 'var(--text-strong)', letterSpacing: '-0.02em' } }, money(monthly)),
             h('span', { style: { font: '500 14px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)', marginBottom: 6 } }, '/ mo')),
