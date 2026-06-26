@@ -21,7 +21,10 @@
   var _sm = _hash.match(/[#&]s=([^&]+)/);
   if (_sm) localStorage.setItem("ls_session_token", decodeURIComponent(_sm[1]));
   var _im = _hash.match(/[#&]invite=([^&]+)/);
-  var PENDING_INVITE = _im ? decodeURIComponent(_im[1]) : null;
+  // Persist the invite token: OAuth sign-in is a full-page redirect, so an
+  // in-memory value would be lost before the user is authenticated. We consume
+  // it from localStorage in bootstrap() once a session exists.
+  if (_im) localStorage.setItem("ls_pending_invite", decodeURIComponent(_im[1]));
   if (_sm || _im) history.replaceState(null, "", location.pathname + location.search);
   var SESSION_TOKEN = localStorage.getItem("ls_session_token");
 
@@ -165,10 +168,18 @@
     bootstrap: function (comp) {
       return req("GET", "/auth/me").then(function (meRes) {
         var user = (meRes && meRes.user) || null;
+        var pendingInvite = localStorage.getItem("ls_pending_invite");
+        var joinedOrgId = null;
         var pre = Promise.resolve();
-        if (user && PENDING_INVITE) {
-          var _tok = PENDING_INVITE; PENDING_INVITE = null;
-          pre = req("POST", "/orgs/accept-invite", { token: _tok }).catch(function () {});
+        if (user && pendingInvite) {
+          pre = req("POST", "/orgs/accept-invite", { token: pendingInvite }).then(function (r) {
+            localStorage.removeItem("ls_pending_invite");
+            if (r && r.orgId) joinedOrgId = r.orgId;
+            if (comp.flash) comp.flash("Invite accepted — welcome to the team", "mine");
+          }).catch(function (e) {
+            localStorage.removeItem("ls_pending_invite");
+            if (comp.flash) comp.flash("Couldn't join via invite: " + ((e && e.message) || "expired or invalid"), "conflict");
+          });
         }
         return pre.then(function () { return req("GET", "/orgs"); }).then(function (res) {
           var list = (res && res.orgs) || [];
@@ -190,7 +201,7 @@
           }).then(function (orgsArr) {
             var orgs = {};
             orgsArr.forEach(function (o) { orgs[o.id] = o; });
-            comp.setState({ orgs: orgs, orgId: orgsArr[0].id, route: "app", user: user });
+            comp.setState({ orgs: orgs, orgId: (joinedOrgId && orgs[joinedOrgId]) ? joinedOrgId : orgsArr[0].id, route: "app", user: user });
             console.log("[LSAPI] signed in as " + (user && (user.email || user.name) || "?") + " · " + orgsArr.length + " org(s)");
             // Fill in storage usage (slow bucket listing) without blocking render.
             orgsArr.forEach(function (o) {

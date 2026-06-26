@@ -128,13 +128,25 @@ export async function upsertUser(
   provider: Provider,
   p: ProviderProfile,
 ): Promise<User> {
-  const existing = await env.DB.prepare(
+  // 1. Exact provider identity (stable across email/name changes at the provider).
+  const byProvider = await env.DB.prepare(
     "SELECT * FROM users WHERE provider = ? AND provider_id = ?",
   )
     .bind(provider, p.providerId)
     .first<User>();
-  if (existing) return existing;
+  if (byProvider) return byProvider;
 
+  // 2. Merge by verified email: one email is one account regardless of which
+  //    provider it signs in with (so google + github of the same person are the
+  //    same Lockstep user). Only when the provider gives us an email.
+  if (p.email) {
+    const byEmail = await env.DB.prepare("SELECT * FROM users WHERE lower(email) = lower(?)")
+      .bind(p.email)
+      .first<User>();
+    if (byEmail) return byEmail;
+  }
+
+  // 3. First time we've seen this email → create the account.
   const user: User = {
     id: uuid(),
     provider,
