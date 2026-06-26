@@ -236,6 +236,10 @@
     setRole: function (orgId, userId, role) { return req("POST", "/orgs/" + orgId + "/members/" + userId + "/role", { role: (role || "member").toLowerCase() }); },
     removeMember: function (orgId, userId) { return req("DELETE", "/orgs/" + orgId + "/members/" + userId); },
     acceptInvite: function (token) { return req("POST", "/orgs/accept-invite", { token: token }); },
+    getActivity: function (orgId, limit, offset) {
+      return req("GET", "/orgs/" + orgId + "/activity?limit=" + (limit || 20) + "&offset=" + (offset || 0))
+        .then(function (r) { return { rows: mapActivity(r, null), total: (r && r.total) || 0 }; });
+    },
     startCheckout: function (orgId, seats) { return req("POST", "/orgs/" + orgId + "/billing/checkout", { seats: seats || 1 }); },
     openPortal: function (orgId) { return req("POST", "/orgs/" + orgId + "/billing/portal", {}); },
   };

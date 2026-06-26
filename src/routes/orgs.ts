@@ -533,6 +533,9 @@ app.get("/:orgId/activity", async (c) => {
   const orgId = c.req.param("orgId");
   if (!(await orgRole(c.env, orgId, userId))) return c.json({ message: "not a member" }, 403);
 
+  const limit = Math.min(100, Math.max(1, parseInt(c.req.query("limit") || "25", 10) || 25));
+  const offset = Math.max(0, parseInt(c.req.query("offset") || "0", 10) || 0);
+
   const events: Array<{ kind: string; what: string; who: string; when: number }> = [];
 
   const org = await c.env.DB.prepare("SELECT name, created_at FROM orgs WHERE id = ?")
@@ -548,14 +551,14 @@ app.get("/:orgId/activity", async (c) => {
   if (st) events.push({ kind: "storage", what: `connected storage · ${st.bucket}`, who: me, when: st.updated_at || st.created_at });
 
   const repos = await c.env.DB.prepare(
-    "SELECT slug, created_at FROM repos WHERE org_id = ? ORDER BY created_at DESC LIMIT 20",
+    "SELECT slug, created_at FROM repos WHERE org_id = ? ORDER BY created_at DESC LIMIT 50",
   )
     .bind(orgId)
     .all<{ slug: string; created_at: number }>();
   for (const r of repos.results) events.push({ kind: "repo", what: `created repo ${r.slug}`, who: me, when: r.created_at });
 
   const tokens = await c.env.DB.prepare(
-    "SELECT name, created_at FROM tokens WHERE user_id = ? ORDER BY created_at DESC LIMIT 10",
+    "SELECT name, created_at FROM tokens WHERE user_id = ? ORDER BY created_at DESC LIMIT 50",
   )
     .bind(userId)
     .all<{ name: string; created_at: number }>();
@@ -563,7 +566,7 @@ app.get("/:orgId/activity", async (c) => {
 
   // Logged dynamic events (push/lock/unlock).
   const logged = await c.env.DB.prepare(
-    "SELECT kind, detail, actor_name, created_at FROM events WHERE org_id = ? ORDER BY created_at DESC LIMIT 40",
+    "SELECT kind, detail, actor_name, created_at FROM events WHERE org_id = ? ORDER BY created_at DESC LIMIT 200",
   )
     .bind(orgId)
     .all<{ kind: string; detail: string | null; actor_name: string | null; created_at: number }>();
@@ -572,7 +575,7 @@ app.get("/:orgId/activity", async (c) => {
   }
 
   events.sort((a, b) => b.when - a.when);
-  return c.json({ activity: events.slice(0, 25) });
+  return c.json({ activity: events.slice(offset, offset + limit), total: events.length });
 });
 
 function maskedStorage(b: StorageBody) {

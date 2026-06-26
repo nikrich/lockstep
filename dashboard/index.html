@@ -8,7 +8,7 @@
 <link rel="alternate icon" type="image/png" sizes="32x32" href="/favicon-32.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="icon" href="/favicon.ico" sizes="any">
-<script src="api.js?v=ab031823"></script>
+<script src="api.js?v=7d647c2a"></script>
 <script src="./support.js?v=f08a61cd"></script>
 </head>
 <body>
@@ -230,6 +230,18 @@ class Component extends DCLogic {
   }
   go(nav) { this.setState({ nav, repoOpen: null, orgMenuOpen: false, userMenuOpen: false, drawerOpen: false }); }
   narrow() { return this.state.vw < 860; }
+  loadActivity(offset) {
+    const orgId = this.state.orgId;
+    if (!window.LSAPI) {
+      const all = (this.org().activity) || [];
+      this.setState({ actRows: all.slice(offset, offset + 20), actTotal: all.length, actOffset: offset, actOrg: orgId, actLoading: false });
+      return;
+    }
+    this.setState({ actLoading: true, actOrg: orgId });
+    window.LSAPI.getActivity(orgId, 20, offset)
+      .then(r => this.setState({ actRows: r.rows, actTotal: r.total, actOffset: offset, actOrg: orgId, actLoading: false }))
+      .catch(e => { this.setState({ actLoading: false }); this.flash('Failed to load activity: ' + e.message, 'conflict'); });
+  }
   drawer() {
     if (!this.narrow() || !this.state.drawerOpen) return null;
     return h(React.Fragment, null,
@@ -538,6 +550,7 @@ class Component extends DCLogic {
     const go = (id) => () => { this.setState({ cmdOpen: false }); this.go(id); };
     return [
       { icon: 'layout-dashboard', label: 'Go to Overview', kind: 'Navigate', run: go('home') },
+      { icon: 'activity', label: 'Go to Activity', kind: 'Navigate', run: go('activity') },
       { icon: 'hard-drive', label: 'Go to Storage', kind: 'Navigate', run: go('storage') },
       { icon: 'users', label: 'Go to Members', kind: 'Navigate', run: go('members') },
       { icon: 'box', label: 'Go to Repositories', kind: 'Navigate', run: go('repos') },
@@ -609,6 +622,7 @@ class Component extends DCLogic {
     const st = org.storage;
     const items = [
       { id: 'home', icon: 'layout-dashboard', label: 'Overview' },
+      { id: 'activity', icon: 'activity', label: 'Activity' },
       { id: 'storage', icon: 'hard-drive', label: 'Storage', dot: st.connected ? 'var(--status-synced)' : 'var(--status-conflict)' },
       { id: 'members', icon: 'users', label: 'Members', count: org.members.length },
       { id: 'repos', icon: 'box', label: 'Repositories', count: org.repos.length },
@@ -680,6 +694,7 @@ class Component extends DCLogic {
   content() {
     switch (this.state.nav) {
       case 'home': return this.home();
+      case 'activity': return this.activity();
       case 'storage': return this.storage();
       case 'members': return this.members();
       case 'repos': return this.state.repoOpen ? this.repoDetail() : this.repos();
@@ -688,6 +703,38 @@ class Component extends DCLogic {
       case 'settings': return this.settings();
       default: return this.home();
     }
+  }
+
+  // ================= ACTIVITY =================
+  activity() {
+    const { Card, Button } = this.D;
+    const orgId = this.state.orgId;
+    const PAGE = 20;
+    // Lazy-load when entering the screen or switching orgs.
+    if (this.state.actOrg !== orgId && !this.state.actLoading) setTimeout(() => this.loadActivity(0), 0);
+    const ready = this.state.actOrg === orgId;
+    const rows = ready && this.state.actRows ? this.state.actRows : [];
+    const total = ready ? (this.state.actTotal || 0) : 0;
+    const offset = ready ? (this.state.actOffset || 0) : 0;
+    const loading = this.state.actLoading;
+    return this.pageWrap([
+      this.pageHead('Activity', 'Everything that’s happened in ' + this.org().name + ' — pushes, locks, members, repos, billing.', null),
+      h(Card, { pad: 'none' },
+        loading
+          ? h('div', { style: { padding: 48, display: 'flex', justifyContent: 'center', color: 'var(--text-muted)' } }, h(Icon, { n: 'loader-circle', s: 20, style: { animation: 'ls-spin .8s linear infinite' } }))
+          : rows.length === 0
+            ? h('div', { style: { padding: 48, textAlign: 'center', font: '400 13px/1.4 Sora, sans-serif', color: 'var(--text-muted)' } }, 'No activity yet.')
+            : h('div', null, rows.map((a, i) => h('div', { key: i, style: { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 18px', borderBottom: i < rows.length - 1 ? '1px solid var(--hairline)' : 'none' } },
+                h('span', { style: { width: 30, height: 30, flex: 'none', borderRadius: 8, background: 'color-mix(in srgb, ' + a.tint + ' 14%, transparent)', color: a.tint, display: 'flex', alignItems: 'center', justifyContent: 'center' } }, h(Icon, { n: a.icon, s: 15 })),
+                h('div', { style: { flex: 1, minWidth: 0 } },
+                  h('div', { style: { font: '400 13px/1.4 Sora, sans-serif', color: 'var(--text-body)' } }, h('span', { style: { fontWeight: 600, color: 'var(--text-strong)' } }, a.who), ' ', a.what)),
+                h('span', { style: { font: '500 11px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)', flex: 'none' } }, a.when))))),
+      h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 } },
+        h('span', { style: { font: '500 12px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, total === 0 ? '—' : ('Showing ' + (offset + 1) + '–' + Math.min(offset + PAGE, total) + ' of ' + total)),
+        h('div', { style: { display: 'flex', gap: 8 } },
+          h(Button, { variant: 'secondary', size: 'sm', disabled: loading || offset <= 0, iconLeft: h(Icon, { n: 'chevron-left', s: 15 }), onClick: () => this.loadActivity(Math.max(0, offset - PAGE)) }, 'Newer'),
+          h(Button, { variant: 'secondary', size: 'sm', disabled: loading || (offset + PAGE) >= total, iconRight: h(Icon, { n: 'chevron-right', s: 15 }), onClick: () => this.loadActivity(offset + PAGE) }, 'Older')))
+    ]);
   }
 
   // ================= HOME =================
@@ -730,8 +777,8 @@ class Component extends DCLogic {
         h(Card, { pad: 'none' },
           h('div', { style: { padding: '14px 18px', borderBottom: '1px solid var(--hairline)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
             h('span', { style: { font: '600 14px/1 Sora, sans-serif', color: 'var(--text-strong)' } }, 'Recent activity'),
-            h('span', { style: { font: '500 11px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, 'last 7 days')),
-          h('div', null, org.activity.map((a, i) => h('div', { key: i, style: { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 18px', borderBottom: i < org.activity.length - 1 ? '1px solid var(--hairline)' : 'none' } },
+            h('span', { onClick: () => this.go('activity'), style: { cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, font: '500 11px/1 "Spline Sans Mono", monospace', color: 'var(--amber-400)' } }, 'View all', h(Icon, { n: 'arrow-right', s: 13 }))),
+          h('div', null, org.activity.slice(0, 10).map((a, i, arr) => h('div', { key: i, style: { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 18px', borderBottom: i < arr.length - 1 ? '1px solid var(--hairline)' : 'none' } },
             h('span', { style: { width: 30, height: 30, flex: 'none', borderRadius: 8, background: 'color-mix(in srgb, ' + a.tint + ' 14%, transparent)', color: a.tint, display: 'flex', alignItems: 'center', justifyContent: 'center' } }, h(Icon, { n: a.icon, s: 15 })),
             h('div', { style: { flex: 1, minWidth: 0 } },
               h('div', { style: { font: '400 13px/1.4 Sora, sans-serif', color: 'var(--text-body)' } }, h('span', { style: { fontWeight: 600, color: 'var(--text-strong)' } }, a.who), ' ', a.what)),
