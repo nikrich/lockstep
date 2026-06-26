@@ -31,6 +31,10 @@
   @keyframes ls-pop{0%{transform:scale(.85);opacity:0;}60%{transform:scale(1.04);}100%{transform:scale(1);opacity:1;}}
   @keyframes ls-grow{from{transform:scaleX(0);}to{transform:scaleX(1);}}
   @keyframes ls-breathe{0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(255,178,36,0);}50%{transform:scale(1.06);box-shadow:0 0 26px 5px rgba(255,178,36,0.30);}}
+  @keyframes ls-floaty{0%,100%{transform:translateY(0);}50%{transform:translateY(-7px);}}
+  @keyframes ls-scan{0%{transform:translateY(-44px);opacity:0;}12%{opacity:1;}88%{opacity:1;}100%{transform:translateY(360px);opacity:0;}}
+  @keyframes ls-blink{0%,100%{opacity:1;}50%{opacity:.28;}}
+  @keyframes ls-shimmerx{0%{transform:translateX(-120%);}100%{transform:translateX(120%);}}
   @keyframes ls-dot{0%,100%{opacity:.2;transform:translateY(0);}50%{opacity:1;transform:translateY(-2px);}}
   @keyframes ls-slidein{from{transform:translateX(-100%);}to{transform:translateX(0);}}
   /* Light variant: remap the ink + slate ramps; the semantic aliases follow. Status/lock colors stay identical. */
@@ -306,8 +310,17 @@ class Component extends DCLogic {
   }
 
   // ================= AUTH =================
+  keyMark(size, glow) {
+    return h('span', { style: { position: 'relative', width: size, height: size, flex: 'none', borderRadius: Math.round(size * 0.28), background: 'linear-gradient(158deg, #ffce63, #f59410)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', boxShadow: (glow ? '0 10px 34px rgba(255,178,36,0.5), ' : '') + 'inset 0 1.5px 0 rgba(255,255,255,0.45), inset 0 -2px 4px rgba(120,60,0,0.25)' } },
+      h('span', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: size * 0.015 } },
+        h('span', { style: { width: size * 0.24, height: size * 0.24, borderRadius: '50%', background: '#1c1407' } }),
+        h('span', { style: { width: size * 0.135, height: size * 0.2, background: '#1c1407', borderRadius: '0 0 ' + (size * 0.04) + 'px ' + (size * 0.04) + 'px' } })));
+  }
+
   signin() {
+    const theme = this.state.theme;
     const narrow = this.narrow();
+    const { Avatar } = this.D;
     const oauth = (label, icon, primary) => {
       const p = icon === 'github' ? 'github' : 'google';
       const busy = this.state.authBusy === p;
@@ -319,30 +332,76 @@ class Component extends DCLogic {
           if (window.LSAPI) { this.setState({ authBusy: p }); setTimeout(() => window.LSAPI.authStart(p), 30); }
           else this.setState({ route: 'app', nav: 'home' });
         },
-        onMouseEnter: e => { if (anyBusy) return; e.currentTarget.style.borderColor = 'var(--border-strong)'; e.currentTarget.style.background = primary ? 'var(--brand-hover)' : 'var(--surface-hover)'; },
-        onMouseLeave: e => { if (anyBusy) return; e.currentTarget.style.borderColor = primary ? 'transparent' : 'var(--border-default)'; e.currentTarget.style.background = primary ? 'var(--brand)' : 'var(--surface-card)'; },
-        style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, height: 46, width: '100%', borderRadius: 'var(--radius-md)', cursor: anyBusy ? 'default' : 'pointer', opacity: anyBusy && !busy ? 0.5 : 1, font: '600 14px/1 Sora, sans-serif', border: '1px solid ' + (primary ? 'transparent' : 'var(--border-default)'), background: primary ? 'var(--brand)' : 'var(--surface-card)', color: primary ? 'var(--brand-contrast)' : 'var(--text-body)', boxShadow: primary ? 'var(--glow-amber)' : 'var(--shadow-edge)', transition: 'all var(--dur-fast) var(--ease-out)' },
+        onMouseEnter: e => { if (anyBusy) return; e.currentTarget.style.borderColor = primary ? 'transparent' : 'var(--border-strong)'; e.currentTarget.style.background = primary ? 'var(--brand-hover)' : 'var(--surface-hover)'; e.currentTarget.style.transform = 'translateY(-1px)'; },
+        onMouseLeave: e => { if (anyBusy) return; e.currentTarget.style.borderColor = primary ? 'transparent' : 'var(--border-default)'; e.currentTarget.style.background = primary ? 'var(--brand)' : 'var(--surface-card)'; e.currentTarget.style.transform = 'none'; },
+        style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, height: 48, width: '100%', borderRadius: 'var(--radius-md)', cursor: anyBusy ? 'default' : 'pointer', opacity: anyBusy && !busy ? 0.5 : 1, font: '600 14px/1 Sora, sans-serif', border: '1px solid ' + (primary ? 'transparent' : 'var(--border-default)'), background: primary ? 'var(--brand)' : 'var(--surface-card)', color: primary ? 'var(--brand-contrast)' : 'var(--text-body)', boxShadow: primary ? 'var(--glow-amber)' : 'var(--shadow-edge)', transition: 'all var(--dur-fast) var(--ease-out)' },
       },
         busy ? h('span', { style: { width: 16, height: 16, borderRadius: '50%', border: '2px solid currentColor', borderTopColor: 'transparent', opacity: 0.7, animation: 'ls-spin .7s linear infinite' } }) : h(Icon, { n: icon, s: 18 }),
         busy ? 'Redirecting…' : label);
     };
 
+    const stateColor = { locked: 'var(--status-locked)', mine: 'var(--status-mine)', synced: 'var(--status-synced)' };
+    const stateBg = { locked: 'var(--status-locked-bg)', mine: 'var(--status-mine-bg)', synced: 'var(--status-synced-bg)' };
+    const peekRows = [
+      { path: 'Content/Maps/Arena.umap', who: 'Kai Renner', state: 'locked', t: '14m', just: true },
+      { path: 'Content/Characters/Hero.uasset', who: 'You', state: 'mine', t: '12m' },
+      { path: 'Content/Audio/Theme.fbx', who: 'Mara Voss', state: 'synced', t: '2h' },
+    ];
+    const peek = h('div', { style: { position: 'relative', width: '100%', maxWidth: 480, borderRadius: 'var(--radius-xl)', background: 'var(--surface-card)', border: '1px solid var(--border-default)', boxShadow: 'var(--shadow-lg)', overflow: 'hidden', animation: 'ls-floaty 7s var(--ease-out) infinite' } },
+      h('div', { style: { position: 'absolute', left: 0, right: 0, top: 0, height: 44, background: 'linear-gradient(180deg, transparent, rgba(255,178,36,0.14), transparent)', pointerEvents: 'none', zIndex: 3, animation: 'ls-scan 4.6s cubic-bezier(.5,0,.5,1) infinite' } }),
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '13px 16px', borderBottom: '1px solid var(--hairline)', background: 'var(--surface-raised)' } },
+        h(Icon, { n: 'box', s: 15, color: 'var(--amber-400)' }),
+        h('span', { style: { font: '600 12px/1 "Spline Sans Mono", monospace', color: 'var(--text-secondary)' } }, 'aurora-rpg'),
+        h('span', { style: { font: '500 11px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, '\u00b7 lock table'),
+        h('span', { style: { flex: 1 } }),
+        h('span', { style: { width: 7, height: 7, borderRadius: '50%', background: 'var(--status-synced)', boxShadow: '0 0 8px var(--status-synced)', animation: 'ls-blink 1.6s ease-in-out infinite' } }),
+        h('span', { style: { font: '600 11px/1 "Spline Sans Mono", monospace', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--status-synced)' } }, 'live')),
+      ...peekRows.map((r, i) => h('div', { key: i, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderBottom: i < peekRows.length - 1 ? '1px solid var(--hairline)' : 'none', background: r.just ? 'color-mix(in srgb, var(--amber-400) 7%, transparent)' : 'transparent' } },
+        h(Icon, { n: r.state === 'synced' ? 'check' : 'lock', s: 13, color: stateColor[r.state] }),
+        h('span', { style: { flex: 1, minWidth: 0, font: '500 12px/1.3 "Spline Sans Mono", monospace', color: 'var(--text-body)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, r.path),
+        h(Avatar, { name: r.who === 'You' ? 'You Me' : r.who, size: 18, ring: r.state === 'mine' }),
+        h('span', { style: { flex: 'none', padding: '3px 8px', borderRadius: 'var(--radius-pill)', background: stateBg[r.state], font: '600 10px/1 "Spline Sans Mono", monospace', letterSpacing: '0.05em', textTransform: 'uppercase', color: stateColor[r.state] } }, r.state === 'locked' ? 'held' : r.state),
+        h('span', { style: { flex: 'none', width: 26, textAlign: 'right', font: '500 10.5px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } }, r.t))));
+
+    const grid = 'repeating-linear-gradient(0deg, var(--hairline) 0 1px, transparent 1px 30px), repeating-linear-gradient(90deg, var(--hairline) 0 1px, transparent 1px 30px)';
+
     return h('div', { style: { flex: 1, display: 'flex', minHeight: 0 } },
-      h('div', { style: { flex: '1 1 0', minWidth: 0, display: narrow ? 'none' : 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: 48, background: 'radial-gradient(1100px 520px at 18% -10%, rgba(255,178,36,0.10), transparent 60%), var(--bg-panel)', borderRight: '1px solid var(--hairline)' } },
-        h('img', { src: this.state.theme === 'light' ? 'lockstep/logo-wordmark-light.svg' : 'lockstep/logo-wordmark-dark.svg', height: 30, style: { alignSelf: 'flex-start' } }),
-        h('div', { style: { maxWidth: 460 } },
-          h('div', { style: { font: '600 11px/1 "Spline Sans Mono", monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--amber-400)', marginBottom: 18 } }, 'Admin control plane'),
-          h('div', { style: { font: '700 38px/1.15 Sora, sans-serif', letterSpacing: '-0.02em', color: 'var(--text-strong)' } }, 'Own your bytes.', h('br'), 'Run your studio.'),
-          h('p', { style: { font: '400 15px/1.6 Sora, sans-serif', color: 'var(--text-secondary)', marginTop: 18 } }, 'Set up storage, members, repos and billing for your team. This is the one place bucket credentials are ever entered \u2014 the desktop app never sees them.')),
-        h('div', { style: { display: 'flex', gap: 22, font: '500 12px/1 "Spline Sans Mono", monospace', color: 'var(--text-muted)' } },
-          h('span', null, '$0 egress'), h('span', null, '\u00b7'), h('span', null, 'BYO bucket'), h('span', null, '\u00b7'), h('span', null, 'Perforce-grade locks'))),
-      h('div', { style: { flex: narrow ? '1' : '0 0 480px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: narrow ? '32px 20px' : 40, position: 'relative' } },
-        this.themeToggle({ position: 'absolute', top: 24, right: 24 }),
-        h('div', { style: { width: '100%', maxWidth: 340 } },
-          h('div', { style: { font: '700 24px/1.2 Sora, sans-serif', letterSpacing: '-0.015em', color: 'var(--text-strong)' } }, 'Sign in to Lockstep'),
-          h('p', { style: { font: '400 14px/1.5 Sora, sans-serif', color: 'var(--text-muted)', marginTop: 8, marginBottom: 26 } }, 'OAuth only \u2014 no passwords to leak.'),
-          h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } }, oauth('Continue with GitHub', 'github', true), oauth('Continue with Google', 'chrome', false)),
-          h('div', { style: { marginTop: 28, paddingTop: 18, borderTop: '1px solid var(--hairline)', font: '400 12px/1.6 Sora, sans-serif', color: 'var(--text-muted)' } },
+      h('div', { style: { flex: '1 1 0', minWidth: 0, position: 'relative', display: narrow ? 'none' : 'flex', flexDirection: 'column', padding: '38px 52px 40px', overflowY: 'auto', background: 'var(--bg-panel)', borderRight: '1px solid var(--hairline)' } },
+        h('div', { style: { position: 'absolute', inset: 0, backgroundImage: grid, opacity: 0.5, maskImage: 'radial-gradient(120% 90% at 30% 20%, #000 30%, transparent 78%)', WebkitMaskImage: 'radial-gradient(120% 90% at 30% 20%, #000 30%, transparent 78%)', pointerEvents: 'none' } }),
+        h('div', { style: { position: 'absolute', top: '-22%', left: '-12%', width: 620, height: 620, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,178,36,0.20), transparent 62%)', filter: 'blur(8px)', pointerEvents: 'none', animation: 'ls-breathe 9s ease-in-out infinite' } }),
+        h('img', { src: theme === 'light' ? 'lockstep/logo-wordmark-light.svg' : 'lockstep/logo-wordmark-dark.svg', height: 26, style: { position: 'relative', zIndex: 1, alignSelf: 'flex-start', flex: 'none' } }),
+        h('div', { style: { position: 'relative', zIndex: 1, width: '100%', maxWidth: 520, margin: 'auto 0', flex: 'none', paddingTop: 24 } },
+          h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, padding: '5px 11px 5px 6px', borderRadius: 'var(--radius-pill)', background: 'var(--status-locked-bg)', border: '1px solid color-mix(in srgb, var(--amber-400) 28%, transparent)', marginBottom: 22 } },
+            h('span', { style: { width: 16, height: 16, borderRadius: 5, background: 'var(--amber-400)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' } }, h(Icon, { n: 'lock', s: 10, color: '#1c1407', sw: 2.5 })),
+            h('span', { style: { font: '600 10.5px/1 "Spline Sans Mono", monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--amber-300)' } }, 'Admin control plane')),
+          h('div', { style: { font: '700 44px/1.08 Sora, sans-serif', letterSpacing: '-0.03em', color: 'var(--text-strong)' } }, 'Own your bytes.', h('br'), h('span', { style: { color: 'var(--amber-400)' } }, 'Run your studio.')),
+          h('p', { style: { font: '400 15px/1.6 Sora, sans-serif', color: 'var(--text-secondary)', marginTop: 16, marginBottom: 26, maxWidth: 440 } }, 'Storage, members, repos and billing \u2014 in one place. The only place bucket credentials are ever entered. The desktop app never sees them.'),
+          peek,
+          h('div', { style: { display: 'flex', gap: 28, marginTop: 28 } },
+            [['$0', 'egress, ever'], ['100 GB', 'in your bucket'], ['10\u201340\u00d7', 'cheaper than LFS']].map(([n, l], i) =>
+              h('div', { key: i, style: { display: 'flex', flexDirection: 'column', gap: 3 } },
+                h('span', { style: { font: '700 22px/1 "Spline Sans Mono", monospace', color: 'var(--text-strong)', letterSpacing: '-0.01em' } }, n),
+                h('span', { style: { font: '400 11.5px/1 Sora, sans-serif', color: 'var(--text-muted)' } }, l)))))),
+      h('div', { style: { flex: narrow ? '1' : '0 0 480px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: narrow ? '32px 20px' : 40, position: 'relative', background: 'var(--bg-app)' } },
+        this.themeToggle({ position: 'absolute', top: 24, right: 24, zIndex: 2 }),
+        h('div', { style: { position: 'relative', width: '100%', maxWidth: 372, animation: 'ls-floaty 8s var(--ease-out) infinite' } },
+          h('div', { style: { position: 'relative', height: 84, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4 } },
+            h('span', { style: { position: 'absolute', width: 132, height: 132, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,178,36,0.30), rgba(255,178,36,0.08) 45%, transparent 68%)', filter: 'blur(4px)', animation: 'ls-breathe 5s ease-in-out infinite', pointerEvents: 'none' } }),
+            this.keyMark(58, true)),
+          h('div', { style: { position: 'relative', borderRadius: 'var(--radius-xl)', background: 'var(--surface-card)', border: '1px solid var(--border-default)', boxShadow: 'var(--shadow-lg)', padding: 30, overflow: 'hidden' } },
+            h('div', { style: { position: 'absolute', top: 0, left: 0, right: 0, height: 2, overflow: 'hidden' } },
+              h('span', { style: { position: 'absolute', inset: 0, background: 'linear-gradient(90deg, transparent, var(--amber-400), transparent)', animation: 'ls-shimmerx 3.5s linear infinite' } })),
+            h('div', { style: { font: '700 23px/1.2 Sora, sans-serif', letterSpacing: '-0.015em', color: 'var(--text-strong)', textAlign: 'center' } }, 'Sign in to Lockstep'),
+            h('p', { style: { font: '400 13.5px/1.5 Sora, sans-serif', color: 'var(--text-muted)', marginTop: 8, marginBottom: 24, textAlign: 'center' } }, 'OAuth only \u2014 no passwords to leak.'),
+            h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } }, oauth('Continue with GitHub', 'github', true), oauth('Continue with Google', 'chrome', false)),
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, margin: '20px 0 4px' } },
+              h('span', { style: { flex: 1, height: 1, background: 'var(--hairline)' } }),
+              h('span', { style: { font: '500 10px/1 "Spline Sans Mono", monospace', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)' } }, 'secure by default'),
+              h('span', { style: { flex: 1, height: 1, background: 'var(--hairline)' } })),
+            h('div', { style: { display: 'flex', justifyContent: 'center', gap: 16, marginTop: 14 } },
+              [['shield-check', 'SSO'], ['key-round', 'No passwords'], ['lock', 'Keys encrypted']].map(([ic, lb], i) =>
+                h('span', { key: i, style: { display: 'inline-flex', alignItems: 'center', gap: 5, font: '500 11px/1 Sora, sans-serif', color: 'var(--text-muted)' } }, h(Icon, { n: ic, s: 13, color: 'var(--status-synced)' }), lb)))),
+          h('div', { style: { marginTop: 18, font: '400 12px/1.6 Sora, sans-serif', color: 'var(--text-muted)', textAlign: 'center' } },
             'By continuing you agree to the ', h('span', { style: { color: 'var(--text-secondary)' } }, 'Terms'), ' and ', h('span', { style: { color: 'var(--text-secondary)' } }, 'Privacy Policy'), '.'))));
   }
 
