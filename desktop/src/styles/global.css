@@ -1,0 +1,88 @@
+@import "./tokens.css";
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  background: var(--bg-app);
+}
+
+* {
+  -webkit-font-smoothing: antialiased;
+  box-sizing: border-box;
+}
+
+body {
+  color: var(--text-body);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  overflow: hidden;
+  cursor: default;
+}
+
+button,
+textarea,
+input,
+select {
+  font-family: var(--font-sans);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--ink-700);
+  border-radius: 5px;
+  border: 2px solid var(--bg-app);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@keyframes ls-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes ls-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes ls-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes ls-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.ls-spin {
+  animation: ls-spin 0.9s linear infinite;
+  display: inline-flex;
+}
+
+/* Disable text selection on chrome/structural surfaces; allow it on content. */
+.no-select {
+  user-select: none;
+}
+.selectable {
+  user-select: text;
+}

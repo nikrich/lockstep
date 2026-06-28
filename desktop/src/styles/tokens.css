@@ -1,0 +1,124 @@
+/* Lockstep design tokens — ported verbatim from the Lockstep design system
+   (dashboard/lockstep/tokens/*). Dark-first; amber = brand/lock accent. */
+
+:root {
+  /* ---- Colors ---- */
+  --amber-50: #fff7e6;
+  --amber-100: #ffe9bf;
+  --amber-200: #ffd98c;
+  --amber-300: #ffc658;
+  --amber-400: #ffb224; /* brand primary */
+  --amber-500: #f59e0b;
+  --amber-600: #d97f06;
+  --amber-700: #a85f04;
+  --amber-glow: rgba(255, 178, 36, 0.28);
+
+  --ink-990: #0a0d11;
+  --ink-950: #0d1116;
+  --ink-900: #11161d;
+  --ink-850: #161c24;
+  --ink-800: #1b232c;
+  --ink-750: #212a35;
+  --ink-700: #2a3543;
+  --ink-600: #36434f;
+  --ink-500: #475463;
+  --hairline: #232c36;
+
+  --slate-500: #5d6b7b;
+  --slate-400: #7d8b9c;
+  --slate-300: #9aa7b6;
+  --slate-200: #bcc6d1;
+  --slate-100: #dde4ec;
+  --slate-050: #eef2f6;
+  --white: #ffffff;
+
+  --paper-0: #ffffff;
+  --paper-50: #f6f8fa;
+  --paper-100: #eef1f5;
+  --paper-200: #e2e7ed;
+  --paper-border: #d6dde4;
+  --paper-ink: #11161d;
+  --paper-ink-soft: #4a5765;
+
+  --status-locked: #ffb224;
+  --status-locked-bg: rgba(255, 178, 36, 0.12);
+  --status-mine: #3b9eff;
+  --status-mine-bg: rgba(59, 158, 255, 0.13);
+  --status-synced: #2fcf91;
+  --status-synced-bg: rgba(47, 207, 145, 0.13);
+  --status-conflict: #ff5d5d;
+  --status-conflict-bg: rgba(255, 93, 93, 0.13);
+  --status-pending: #9b8cff;
+  --status-pending-bg: rgba(155, 140, 255, 0.13);
+
+  --bg-app: var(--ink-990);
+  --bg-panel: var(--ink-900);
+  --surface-card: var(--ink-800);
+  --surface-raised: var(--ink-700);
+  --surface-sunken: var(--ink-950);
+  --surface-hover: var(--ink-750);
+
+  --text-strong: var(--slate-050);
+  --text-body: var(--slate-100);
+  --text-secondary: var(--slate-200);
+  --text-muted: var(--slate-400);
+  --text-on-amber: #1a1206;
+
+  --border-subtle: var(--hairline);
+  --border-default: var(--ink-600);
+  --border-strong: var(--ink-500);
+  --border-focus: var(--amber-400);
+
+  --brand: var(--amber-400);
+  --brand-hover: var(--amber-300);
+  --brand-press: var(--amber-500);
+  --brand-contrast: #1a1206;
+  --accent: var(--status-mine);
+
+  /* ---- Typography ---- */
+  --font-display: "Sora", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Sora", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "Spline Sans Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --weight-extrabold: 800;
+
+  /* ---- Spacing / layout ---- */
+  --control-sm: 28px;
+  --control-md: 34px;
+  --control-lg: 42px;
+  --sidebar-w: 248px;
+  --inspector-w: 340px;
+  --titlebar-h: 38px;
+
+  --z-overlay: 600;
+  --z-dialog: 700;
+  --z-toast: 800;
+
+  /* ---- Radii / borders / shadows / motion ---- */
+  --radius-xs: 3px;
+  --radius-sm: 5px;
+  --radius-md: 7px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-2xl: 20px;
+  --radius-pill: 999px;
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 14px 38px rgba(0, 0, 0, 0.55);
+  --shadow-xl: 0 28px 70px rgba(0, 0, 0, 0.6);
+  --shadow-edge: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+
+  --ring-focus: 0 0 0 3px rgba(255, 178, 36, 0.32);
+  --ring-mine: 0 0 0 3px rgba(59, 158, 255, 0.32);
+  --glow-amber: 0 6px 20px rgba(255, 178, 36, 0.22);
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 110ms;
+  --dur-base: 180ms;
+}

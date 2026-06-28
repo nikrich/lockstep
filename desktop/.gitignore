@@ -1,0 +1,14 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+build.log
+
+# Rust / Tauri
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# env
+.env
+.env.local
