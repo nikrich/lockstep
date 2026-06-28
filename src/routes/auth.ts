@@ -44,8 +44,16 @@ function parseOAuthState(raw: string): { provider: string; pairId?: string } {
   return { provider: raw };
 }
 
-// Minimal provider chooser shown in the browser for the plugin flow.
-function chooserPage(pairId: string): string {
+// Sanitize a client-supplied app name before echoing it into HTML / storing it
+// as a token label. Keep it short and free of markup.
+function cleanClientName(raw: string | undefined | null): string {
+  const name = (raw || "").replace(/[<>"'&]/g, "").trim().slice(0, 48);
+  return name || "this device";
+}
+
+// Minimal provider chooser shown in the browser for the native sign-in flow.
+// `client` is the calling app's name (e.g. "Lockstep Desktop", "Unreal plugin").
+function chooserPage(pairId: string, client: string): string {
   const gh = `/auth/plugin/go/github?pair=${encodeURIComponent(pairId)}`;
   const goog = `/auth/plugin/go/google?pair=${encodeURIComponent(pairId)}`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -55,7 +63,7 @@ function chooserPage(pairId: string): string {
 h1{font-size:20px;margin:0 0 6px}p{color:#bcc6d1;font-size:14px;margin:0 0 24px}
 a{display:flex;align-items:center;justify-content:center;gap:10px;padding:12px;border-radius:8px;text-decoration:none;font-weight:600;margin:10px 0}
 .gh{background:#eef2f6;color:#161d25}.goog{background:#1b232c;color:#eef2f6;border:1px solid #36434f}</style></head>
-<body><div class="card"><h1>Sign in to Lockstep</h1><p>Authorize the Unreal plugin on this machine.</p>
+<body><div class="card"><h1>Sign in to Lockstep</h1><p>Authorize <b>${client}</b> on this machine.</p>
 <a class="gh" href="${gh}">Continue with GitHub</a>
 <a class="goog" href="${goog}">Continue with Google</a></div></body></html>`;
 }
@@ -64,7 +72,7 @@ const closeTabHtml = (ok: boolean) =>
   `<!doctype html><meta charset="utf-8"><title>Lockstep</title>
 <body style="margin:0;background:#0f141a;color:#eef2f6;font:400 16px/1.6 system-ui,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center">
 <div style="text-align:center"><div style="font-size:22px;margin-bottom:8px">${ok ? "✓ Signed in to Lockstep" : "Sign-in failed"}</div>
-<div style="color:#bcc6d1;font-size:14px">${ok ? "You can close this tab and return to Unreal." : "Please restart sign-in from the editor."}</div></div></body>`;
+<div style="color:#bcc6d1;font-size:14px">${ok ? "You can close this tab and return to the app." : "Please restart sign-in from the app."}</div></div></body>`;
 
 // Current signed-in user (session cookie or PAT). Registered before /:provider
 // so the static path wins. The dashboard calls this to know who's logged in.
@@ -85,16 +93,17 @@ app.get("/me", requireAuth(), async (c) => {
 app.get("/plugin/start", async (c) => {
   const redirectUri = c.req.query("redirect_uri") || "";
   const state = c.req.query("state") || "";
+  const client = cleanClientName(c.req.query("client"));
   if (!isLoopbackRedirect(redirectUri)) {
     return c.text("invalid redirect_uri (must be a loopback address)", 400);
   }
   const pairId = randomId(16);
   await c.env.SESSIONS.put(
     `pair:${pairId}`,
-    JSON.stringify({ redirectUri, pluginState: state }),
+    JSON.stringify({ redirectUri, pluginState: state, client }),
     { expirationTtl: PAIR_TTL },
   );
-  return c.html(chooserPage(pairId));
+  return c.html(chooserPage(pairId, client));
 });
 
 // Step 2: chosen provider -> begin OAuth, carrying the pairing through `state`.
@@ -163,10 +172,10 @@ app.get("/:provider/callback", async (c) => {
   if (parsed.pairId) {
     const pairRaw = await c.env.SESSIONS.get(`pair:${parsed.pairId}`);
     if (!pairRaw) return c.html(closeTabHtml(false), 400);
-    const pair = JSON.parse(pairRaw) as { redirectUri: string; pluginState: string };
+    const pair = JSON.parse(pairRaw) as { redirectUri: string; pluginState: string; client?: string };
     await c.env.SESSIONS.delete(`pair:${parsed.pairId}`);
 
-    const tokenName = "Unreal plugin";
+    const tokenName = cleanClientName(pair.client);
     const { secret, hash } = await newToken();
     await c.env.DB.prepare(
       `INSERT INTO tokens (id, user_id, name, token_hash, scopes, created_at, expires_at)

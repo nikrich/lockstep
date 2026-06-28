@@ -14,6 +14,7 @@ import tokenRoutes from "./routes/tokens";
 import orgRoutes from "./routes/orgs";
 import lfsRoutes from "./routes/lfs";
 import lockRoutes from "./routes/locks";
+import pushRoutes from "./routes/pushes";
 import webhookRoutes from "./routes/webhooks";
 
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
@@ -53,6 +54,7 @@ app.route("/webhooks", webhookRoutes);
 //   {lfs.url}/objects/batch  and  {lfs.url}/locks...
 app.route("/:repo", lfsRoutes);
 app.route("/:repo/locks", lockRoutes);
+app.route("/:repo/pushes", pushRoutes);
 
 app.notFound((c) => c.json({ message: "not found" }, 404));
 app.onError((err, c) => {
