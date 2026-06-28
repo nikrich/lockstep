@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lockstep</title>
-<link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<link rel="alternate icon" type="image/png" sizes="32x32" href="/favicon-32.png">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=bd91d32f">
+<link rel="alternate icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=56e0e4fa">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=b069718e">
+<link rel="icon" href="/favicon.ico?v=41be851f" sizes="any">
 <script src="api.js?v=7d647c2a"></script>
 <script src="./support.js?v=f08a61cd"></script>
 </head>
@@ -38,6 +38,8 @@
   @keyframes ls-shimmerx{0%{transform:translateX(-120%);}100%{transform:translateX(120%);}}
   @keyframes ls-dot{0%,100%{opacity:.2;transform:translateY(0);}50%{opacity:1;transform:translateY(-2px);}}
   @keyframes ls-slidein{from{transform:translateX(-100%);}to{transform:translateX(0);}}
+  @keyframes ls-packet{0%{transform:translateX(0) translateY(-50%) scale(.55);opacity:0;}14%{opacity:1;}82%{opacity:1;}100%{transform:translateX(148px) translateY(-50%) scale(.55);opacity:0;}}
+  @keyframes ls-node-pulse{0%,100%{box-shadow:0 4px 16px rgba(255,178,36,.14), inset 0 1px 0 rgba(255,255,255,.05);}50%{box-shadow:0 4px 22px rgba(255,178,36,.28), inset 0 1px 0 rgba(255,255,255,.05);}}
   /* Light variant: remap the ink + slate ramps; the semantic aliases follow. Status/lock colors stay identical. */
   [data-theme="light"]{
     /* raw ramp — for components that read --ink-*/--slate-* directly (Switch, Avatar, counts) */
@@ -306,28 +308,53 @@ class Component extends DCLogic {
   }
 
   splash() {
-    const dot = (d) => h('span', { style: { width: 5, height: 5, borderRadius: '50%', background: 'currentColor', display: 'inline-block', animation: 'ls-dot 1.3s ease-in-out infinite', animationDelay: d } });
-    return h('div', { style: { height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 24, background: 'radial-gradient(900px 480px at 50% 32%, rgba(255,178,36,0.07), transparent 62%), #0a0d11', animation: 'ls-fade .4s var(--ease-out)' } },
-      // Spinning amber ring around a breathing padlock glyph.
-      h('div', { style: { position: 'relative', width: 74, height: 74, display: 'flex', alignItems: 'center', justifyContent: 'center' } },
-        h('div', { style: { position: 'absolute', inset: 0, borderRadius: '50%', border: '2.5px solid rgba(255,178,36,0.13)', borderTopColor: '#ffb224', borderRightColor: '#ffb224', animation: 'ls-spin .8s linear infinite' } }),
-        h('div', { style: { width: 46, height: 46, borderRadius: 14, background: 'linear-gradient(155deg, #ffce6e, #ffb224)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'ls-breathe 1.7s var(--ease-out) infinite' } },
-          h('svg', { width: 24, height: 24, viewBox: '0 0 24 24', fill: 'none' },
-            h('path', { d: 'M8.2 10.5V8a3.8 3.8 0 0 1 7.6 0v2.5', stroke: '#1a1206', strokeWidth: 2.1, strokeLinecap: 'round' }),
-            h('rect', { x: 5.2, y: 10.2, width: 13.6, height: 9.6, rx: 3, fill: '#1a1206' }),
-            h('circle', { cx: 12, cy: 14.3, r: 1.5, fill: '#ffb224' }),
-            h('rect', { x: 11.2, y: 14.3, width: 1.6, height: 3.4, rx: 0.8, fill: '#ffb224' })))),
-      h('div', { style: { display: 'flex', alignItems: 'center', gap: 1, color: '#9aa7b6', font: '600 13px/1 Sora, sans-serif', letterSpacing: '0.02em' } },
-        'Loading Lockstep',
-        h('span', { style: { display: 'inline-flex', gap: 4, marginLeft: 7 } }, dot('0s'), dot('.18s'), dot('.36s'))));
+    // "Loader redesign" (Claude Design): a repo node streams packets across a
+    // dashed path into your locked storage bucket.
+    const PKT = 'cubic-bezier(.45,0,.55,1)';
+    // `backwards` fill so a delayed packet stays at its 0% keyframe (opacity:0)
+    // during the start delay — otherwise it shows as a static dot until it launches.
+    const packet = (size, color, glow, delay) => h('span', { style: { position: 'absolute', top: '50%', left: 0, width: size, height: size, borderRadius: 3, background: color, boxShadow: glow || 'none', animation: 'ls-packet 2.2s ' + PKT + ' ' + (delay || '0s') + ' infinite backwards' } });
+    return h('div', { style: { height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 42, fontFamily: "'Sora', sans-serif", background: 'radial-gradient(130% 90% at 50% 118%, #151c25 0%, #0a0d11 60%)', animation: 'ls-fade .4s var(--ease-out)' } },
+      // node row: repo  ->  packets  ->  bucket
+      h('div', { style: { position: 'relative', width: 248, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
+        // repo node
+        h('div', { style: { width: 56, height: 56, borderRadius: 14, background: '#1b232c', border: '1px solid #2a3543', boxShadow: 'inset 0 1px 0 rgba(255,255,255,.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 } },
+          h('svg', { width: 24, height: 24, viewBox: '0 0 24 24', fill: 'none', stroke: '#9aa7b6', strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round' },
+            h('circle', { cx: 6, cy: 6, r: 2.4 }),
+            h('circle', { cx: 6, cy: 18, r: 2.4 }),
+            h('circle', { cx: 17, cy: 9, r: 2.4 }),
+            h('path', { d: 'M6 8.4v7.2' }),
+            h('path', { d: 'M17 11.2c0 3-3.5 2.6-5 4.4' }))),
+        // path + travelling packets
+        h('div', { style: { position: 'absolute', left: 56, right: 56, top: '50%', height: 2, transform: 'translateY(-50%)' } },
+          h('div', { style: { position: 'absolute', inset: 0, borderTop: '2px dashed #2a3543' } }),
+          packet(10, '#ffb224', '0 0 10px rgba(255,178,36,.6)', ''),
+          packet(8, '#ffc658', null, '.73s'),
+          packet(9, '#ffb224', '0 0 8px rgba(255,178,36,.5)', '1.46s')),
+        // bucket node (your locked storage)
+        h('div', { style: { position: 'relative', width: 56, height: 56, zIndex: 2 } },
+          h('div', { style: { width: 56, height: 56, borderRadius: 14, background: '#1b232c', border: '1px solid rgba(255,178,36,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'ls-node-pulse 2.2s ease-in-out infinite' } },
+            h('svg', { width: 25, height: 25, viewBox: '0 0 24 24', fill: 'none', stroke: '#ffb224', strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round' },
+              h('path', { d: 'M5 6.5h14l-1.2 12.4a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8L5 6.5Z' }),
+              h('path', { d: 'M3.6 6.5h16.8' }))),
+          h('div', { style: { position: 'absolute', right: -6, bottom: -6, width: 22, height: 22, borderRadius: 7, background: 'linear-gradient(155deg,#ffc658,#f59e0b)', boxShadow: '0 2px 7px rgba(255,178,36,.5), inset 0 1px 0 rgba(255,255,255,.5)', border: '2.5px solid #0c1015', display: 'flex', alignItems: 'center', justifyContent: 'center' } },
+            h('svg', { width: 7.5, height: 10, viewBox: '0 0 30 40' },
+              h('circle', { cx: 15, cy: 13, r: 9, fill: '#1a1206' }),
+              h('rect', { x: 10, y: 15, width: 10, height: 20, rx: 5, fill: '#1a1206' }))))),
+      // caption
+      h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9 } },
+        h('span', { style: { font: "600 16px/1 'Sora', sans-serif", letterSpacing: '-.01em', color: '#dde4ec' } }, 'Loading Lockstep'),
+        h('span', { style: { font: "500 12px/1 'Spline Sans Mono', monospace", color: '#7d8b9c', letterSpacing: '.01em' } },
+          'streaming blobs ', h('span', { style: { color: '#ffb224' } }, '→'), ' your bucket')));
   }
 
   // ================= AUTH =================
   keyMark(size, glow) {
     return h('span', { style: { position: 'relative', width: size, height: size, flex: 'none', borderRadius: Math.round(size * 0.28), background: 'linear-gradient(158deg, #ffce63, #f59410)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', boxShadow: (glow ? '0 10px 34px rgba(255,178,36,0.5), ' : '') + 'inset 0 1.5px 0 rgba(255,255,255,0.45), inset 0 -2px 4px rgba(120,60,0,0.25)' } },
-      h('span', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: size * 0.015 } },
-        h('span', { style: { width: size * 0.24, height: size * 0.24, borderRadius: '50%', background: '#1c1407' } }),
-        h('span', { style: { width: size * 0.135, height: size * 0.2, background: '#1c1407', borderRadius: '0 0 ' + (size * 0.04) + 'px ' + (size * 0.04) + 'px' } })));
+      h('svg', { width: Math.round(size * 0.64), height: Math.round(size * 0.64), viewBox: '0 0 120 120', fill: 'none' },
+        h('path', { d: 'M42 28 H32 A10 10 0 0 0 22 38 V82 A10 10 0 0 0 32 92 H42', fill: 'none', stroke: '#1c1407', strokeWidth: 11, strokeLinecap: 'round', strokeLinejoin: 'round' }),
+        h('path', { d: 'M78 28 H88 A10 10 0 0 1 98 38 V82 A10 10 0 0 1 88 92 H78', fill: 'none', stroke: '#1c1407', strokeWidth: 11, strokeLinecap: 'round', strokeLinejoin: 'round' }),
+        h('rect', { x: 53, y: 53, width: 14, height: 14, rx: 7, fill: '#1c1407' })));
   }
 
   signin() {
@@ -382,7 +409,7 @@ class Component extends DCLogic {
       h('div', { style: { flex: '1 1 0', minWidth: 0, position: 'relative', display: narrow ? 'none' : 'flex', flexDirection: 'column', padding: '38px 52px 40px', overflowY: 'auto', background: 'var(--bg-panel)', borderRight: '1px solid var(--hairline)' } },
         h('div', { style: { position: 'absolute', inset: 0, backgroundImage: grid, opacity: 0.5, maskImage: 'radial-gradient(120% 90% at 30% 20%, #000 30%, transparent 78%)', WebkitMaskImage: 'radial-gradient(120% 90% at 30% 20%, #000 30%, transparent 78%)', pointerEvents: 'none' } }),
         h('div', { style: { position: 'absolute', top: '-22%', left: '-12%', width: 620, height: 620, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,178,36,0.20), transparent 62%)', filter: 'blur(8px)', pointerEvents: 'none', animation: 'ls-breathe 9s ease-in-out infinite' } }),
-        h('img', { src: theme === 'light' ? 'lockstep/logo-wordmark-light.svg' : 'lockstep/logo-wordmark-dark.svg', height: 26, style: { position: 'relative', zIndex: 1, alignSelf: 'flex-start', flex: 'none' } }),
+        h('img', { src: theme === 'light' ? 'lockstep/logo-wordmark-light.svg?v=a802c868' : 'lockstep/logo-wordmark-dark.svg?v=bdcaefea', height: 26, style: { position: 'relative', zIndex: 1, alignSelf: 'flex-start', flex: 'none' } }),
         h('div', { style: { position: 'relative', zIndex: 1, width: '100%', maxWidth: 520, margin: 'auto 0', flex: 'none', paddingTop: 24 } },
           h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, padding: '5px 11px 5px 6px', borderRadius: 'var(--radius-pill)', background: 'var(--status-locked-bg)', border: '1px solid color-mix(in srgb, var(--amber-400) 28%, transparent)', marginBottom: 22 } },
             h('span', { style: { width: 16, height: 16, borderRadius: 5, background: 'var(--amber-400)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' } }, h(Icon, { n: 'lock', s: 10, color: '#1c1407', sw: 2.5 })),
@@ -423,7 +450,7 @@ class Component extends DCLogic {
     const { Button, Input, Card } = this.D;
     return h('div', { style: { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 } },
       h('div', { style: { height: 56, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', borderBottom: '1px solid var(--hairline)' } },
-        h('img', { src: this.state.theme === 'light' ? 'lockstep/logo-wordmark-light.svg' : 'lockstep/logo-wordmark-dark.svg', height: 24 }),
+        h('img', { src: this.state.theme === 'light' ? 'lockstep/logo-wordmark-light.svg?v=a802c868' : 'lockstep/logo-wordmark-dark.svg?v=bdcaefea', height: 24 }),
         h('div', { style: { display: 'flex', gap: 8 } }, this.themeToggle(), this.iconBtn('log-out', () => this.setState({ route: 'signin' }), 'Sign out'))),
       h('div', { style: { flex: 1, overflowY: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: this.narrow() ? '24px 16px' : 40 } },
         h('div', { style: { width: '100%', maxWidth: 460 } },
@@ -458,8 +485,8 @@ class Component extends DCLogic {
     const narrow = this.narrow();
     return h('div', { style: { height: 54, flex: 'none', display: 'flex', alignItems: 'center', gap: narrow ? 6 : 12, padding: narrow ? '0 8px' : '0 16px', background: 'var(--bg-panel)', borderBottom: '1px solid var(--hairline)', position: 'relative', zIndex: 50 } },
       narrow && this.iconBtn('menu', () => this.setState(s => ({ drawerOpen: !s.drawerOpen })), 'Menu'),
-      h('img', { src: this.state.theme === 'light' ? 'lockstep/logo-wordmark-light.svg' : 'lockstep/logo-wordmark-dark.svg', height: 22, style: { cursor: 'pointer', flex: 'none' }, onClick: () => this.go('home') }),
-      !narrow && h('span', { style: { width: 1, height: 22, background: 'var(--hairline)', margin: '0 4px' } }),
+      h('img', { src: this.state.theme === 'light' ? 'lockstep/logo-wordmark-light.svg?v=a802c868' : 'lockstep/logo-wordmark-dark.svg?v=bdcaefea', height: 26, style: { cursor: 'pointer', flex: 'none' }, onClick: () => this.go('home') }),
+      !narrow && h('span', { style: { width: 1, height: 24, background: 'var(--hairline)', margin: '0 4px' } }),
       this.orgSwitcher(),
       h('div', { style: { flex: 1, minWidth: 0 } }),
       !narrow && this.iconBtn('command', () => this.setState({ cmdOpen: true, cmdQuery: '' }), 'Command menu (\u2318K)'),

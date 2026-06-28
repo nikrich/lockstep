@@ -53,6 +53,13 @@ const patches = [
   // version the design-system bundle + icon lib as well
   ['<script src="ds-bundle.js"></script>', `<script src="ds-bundle.js${ver("ds-bundle.js")}"></script>`],
   ['<script src="./lucide.min.js"></script>', `<script src="./lucide.min.js${ver("lucide.min.js")}"></script>`],
+  // content-hash the logo + favicon assets so brand changes aren't served stale
+  ['lockstep/logo-wordmark-dark.svg', `lockstep/logo-wordmark-dark.svg${ver("lockstep/logo-wordmark-dark.svg")}`],
+  ['lockstep/logo-wordmark-light.svg', `lockstep/logo-wordmark-light.svg${ver("lockstep/logo-wordmark-light.svg")}`],
+  ['href="/favicon.svg"', `href="/favicon.svg${ver("favicon.svg")}"`],
+  ['href="/favicon-32.png"', `href="/favicon-32.png${ver("favicon-32.png")}"`],
+  ['href="/apple-touch-icon.png"', `href="/apple-touch-icon.png${ver("apple-touch-icon.png")}"`],
+  ['href="/favicon.ico"', `href="/favicon.ico${ver("favicon.ico")}"`],
   // once the design system is ready, replace mock orgs with live data
   [
     "if (ns && ns.Button && window.lucide) { this.D = ns; this.setState({ ready: true }); }",

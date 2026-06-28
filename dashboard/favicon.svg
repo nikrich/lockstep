@@ -1,11 +1,8 @@
 <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Lockstep">
-  <defs>
-    <linearGradient id="a" x1="6" y1="3" x2="26" y2="29" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#ffce6e"/>
-      <stop offset="1" stop-color="#ffb224"/>
-    </linearGradient>
-  </defs>
-  <rect width="32" height="32" rx="7.5" fill="url(#a)"/>
-  <circle cx="16" cy="13.8" r="4.7" fill="#1a1206"/>
-  <rect x="13.6" y="13.4" width="4.8" height="9.8" rx="2.4" fill="#1a1206"/>
+  <rect width="32" height="32" rx="7.5" fill="#ffb224"/>
+  <svg x="3" y="3" width="26" height="26" viewBox="0 0 120 120">
+    <path d="M42 28 H32 A10 10 0 0 0 22 38 V82 A10 10 0 0 0 32 92 H42" stroke="#1a1206" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M78 28 H88 A10 10 0 0 1 98 38 V82 A10 10 0 0 1 88 92 H78" stroke="#1a1206" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="52" y="52" width="16" height="16" rx="8" fill="#1a1206"/>
+  </svg>
 </svg>
