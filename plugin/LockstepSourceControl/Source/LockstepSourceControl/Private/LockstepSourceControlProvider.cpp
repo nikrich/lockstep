@@ -224,8 +224,14 @@ bool FLockstepSourceControlProvider::UsesCheckout() const { return true; } // th
 bool FLockstepSourceControlProvider::UsesFileRevisions() const { return false; }
 bool FLockstepSourceControlProvider::UsesSnapshots() const { return false; }
 bool FLockstepSourceControlProvider::AllowsDiffAgainstDepot() const { return true; }
+#if UE_VERSION_OLDER_THAN(5, 8, 0)
 TOptional<bool> FLockstepSourceControlProvider::IsAtLatestRevision() const { return TOptional<bool>(); }
 TOptional<int> FLockstepSourceControlProvider::GetNumLocalChanges() const { return TOptional<int>(); }
+#else
+TOptional<bool> FLockstepSourceControlProvider::HasChangesToCheckIn() const { return TOptional<bool>(); }
+TOptional<bool> FLockstepSourceControlProvider::HasChangesToSync() const { return TOptional<bool>(); }
+bool FLockstepSourceControlProvider::UsesSoftRevertOnDelete() const { return false; } // matches the engine git provider
+#endif
 
 TSharedPtr<ILockstepSourceControlWorker, ESPMode::ThreadSafe> FLockstepSourceControlProvider::CreateWorker(const FName& InOperationName) const
 {

@@ -8,6 +8,7 @@
 
 #include "ISourceControlProvider.h"
 #include "ILockstepSourceControlWorker.h"
+#include "Misc/EngineVersionComparison.h"
 
 class FLockstepSourceControlState;
 class FLockstepSourceControlCommand;
@@ -47,8 +48,14 @@ public:
 	virtual bool UsesFileRevisions() const override;
 	virtual bool UsesSnapshots() const override;
 	virtual bool AllowsDiffAgainstDepot() const override;
+#if UE_VERSION_OLDER_THAN(5, 8, 0)
 	virtual TOptional<bool> IsAtLatestRevision() const override;
 	virtual TOptional<int> GetNumLocalChanges() const override;
+#else
+	virtual TOptional<bool> HasChangesToCheckIn() const override;
+	virtual TOptional<bool> HasChangesToSync() const override;
+	virtual bool UsesSoftRevertOnDelete() const override;
+#endif
 	virtual void Tick() override;
 	virtual TArray<TSharedRef<class ISourceControlLabel>> GetLabels(const FString& InMatchingSpec) const override;
 	virtual TArray<FSourceControlChangelistRef> GetChangelists(EStateCacheUsage::Type InStateCacheUsage) override;

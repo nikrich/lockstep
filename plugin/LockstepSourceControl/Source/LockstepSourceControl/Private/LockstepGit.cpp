@@ -27,34 +27,74 @@ namespace LockstepGit
 			return false;
 		}
 
-		FString FullCommand = Command;
+		FString BaseCommand = Command;
 		for (const FString& Param : Parameters)
 		{
-			FullCommand += TEXT(" ");
-			FullCommand += Param;
+			BaseCommand += TEXT(" ");
+			BaseCommand += Param;
 		}
+
+		// Windows CreateProcess caps the command line at 32767 chars. A save touching a few
+		// hundred World Partition external actors overflows that in one call, so run the
+		// command over file batches and concatenate the output (equivalent for every git
+		// subcommand we use: status/add/rm/checkout/check-attr are all per-path).
+		const int32 MaxCommandLen = 30000;
+		TArray<TArray<FString>> Batches;
 		if (Files.Num() > 0)
 		{
-			FullCommand += TEXT(" --");
+			int32 Len = BaseCommand.Len() + 3;
+			Batches.AddDefaulted();
 			for (const FString& File : Files)
 			{
-				FullCommand += FString::Printf(TEXT(" \"%s\""), *File);
+				const int32 FileLen = File.Len() + 3;   // quotes + space
+				if (Batches.Last().Num() > 0 && Len + FileLen > MaxCommandLen)
+				{
+					Batches.AddDefaulted();
+					Len = BaseCommand.Len() + 3;
+				}
+				Batches.Last().Add(File);
+				Len += FileLen;
 			}
 		}
+		else
+		{
+			Batches.AddDefaulted();   // one run with no file args
+		}
 
-		int32 ReturnCode = -1;
 		OutStdOut.Reset();
 		OutStdErr.Reset();
-		const bool bLaunched = FPlatformProcess::ExecProcess(
-			*GitBinary, *FullCommand, &ReturnCode, &OutStdOut, &OutStdErr,
-			RepoRoot.IsEmpty() ? nullptr : *RepoRoot);
-
-		if (!bLaunched)
+		bool bAllOk = true;
+		for (const TArray<FString>& Batch : Batches)
 		{
-			OutStdErr = FString::Printf(TEXT("failed to launch git (%s)"), *GitBinary);
-			return false;
+			FString FullCommand = BaseCommand;
+			if (Batch.Num() > 0)
+			{
+				FullCommand += TEXT(" --");
+				for (const FString& File : Batch)
+				{
+					FullCommand += FString::Printf(TEXT(" \"%s\""), *File);
+				}
+			}
+
+			int32 ReturnCode = -1;
+			FString StdOut, StdErr;
+			const bool bLaunched = FPlatformProcess::ExecProcess(
+				*GitBinary, *FullCommand, &ReturnCode, &StdOut, &StdErr,
+				RepoRoot.IsEmpty() ? nullptr : *RepoRoot);
+
+			if (!bLaunched)
+			{
+				OutStdErr = FString::Printf(TEXT("failed to launch git (%s)"), *GitBinary);
+				return false;
+			}
+			OutStdOut += StdOut;
+			if (!StdErr.IsEmpty())
+			{
+				OutStdErr += StdErr;
+			}
+			bAllOk &= (ReturnCode == 0);
 		}
-		return ReturnCode == 0;
+		return bAllOk;
 	}
 
 	FString FindGitBinaryPath()
