@@ -1,8 +1,19 @@
 // Copyright Lockstep. Licensed under the Business Source License 1.1 (see repo LICENSE).
 
 #include "LockstepSourceControlState.h"
+#include "LockstepSourceControlModule.h"
 
 #define LOCTEXT_NAMESPACE "LockstepSourceControl.State"
+
+namespace
+{
+	/** Read the live setting so toggling it applies without a status refresh.
+	 *  State methods run on the game thread; settings guard with a lock. */
+	bool IsSoftLockMode()
+	{
+		return FLockstepSourceControlModule::Get().AccessSettings().IsSoftLockMode();
+	}
+}
 
 #if SOURCE_CONTROL_WITH_SLATE
 #include "RevisionControlStyle/RevisionControlStyle.h"
@@ -68,6 +79,13 @@ FText FLockstepSourceControlState::GetDisplayTooltip() const
 {
 	if (LockState == ELockstepLockState::LockedByOther)
 	{
+		if (IsSoftLockMode())
+		{
+			return FText::Format(
+				LOCTEXT("LockedOtherSoftTip", "🔒 Locked by {0} since {1}.\nSoft-lock mode: you may edit anyway, but coordinate with them or one of you loses work."),
+				FText::FromString(LockOwner),
+				FText::AsDateTime(LockedAt));
+		}
 		return FText::Format(
 			LOCTEXT("LockedOtherTip", "🔒 Locked by {0} since {1}.\nThis asset is read-only until they release the lock."),
 			FText::FromString(LockOwner),
@@ -125,18 +143,24 @@ bool FLockstepSourceControlState::CanCheckIn() const
 {
 	if (bIsLockable)
 	{
-		return LockState == ELockstepLockState::LockedByMe;
+		if (LockState == ELockstepLockState::LockedByMe)
+		{
+			return true;
+		}
+		// Soft-lock mode: edits made without holding the lock must still be
+		// submittable, so lockable falls back to the mergeable rule.
+		return IsSoftLockMode() && (IsModified() || IsAdded());
 	}
 	return IsModified() || IsAdded();
 }
 
 bool FLockstepSourceControlState::CanEdit() const
 {
-	// Editing a lockable asset requires holding its lock. Anything else (or a
-	// file we already hold) is editable.
-	if (bIsLockable)
+	// Editing a lockable asset requires holding its lock — unless locks are
+	// advisory (soft-lock mode), where the badge warns but nothing blocks.
+	if (bIsLockable && LockState == ELockstepLockState::LockedByOther)
 	{
-		return LockState != ELockstepLockState::LockedByOther;
+		return IsSoftLockMode();
 	}
 	return true;
 }

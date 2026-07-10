@@ -100,7 +100,8 @@ ever receives the resolved token string.
 - [ ] CheckIn via temp commit-message file (avoid shell quoting)
 - [ ] Read-only enforcement on disk for lockable assets not held
 - [ ] **OFPA-aware** lock granularity (`__ExternalActors__` → per-actor locks)
-- [ ] Soft / advisory lock mode (warn, don't block) — setting exists, not enforced
+- [x] Soft / advisory lock mode (warn, don't block) — per-client setting; editing
+      and check-in are allowed with a warning while the lock badge stays visible
 - [ ] Toolbar menu: refresh locks / admin force-unlock
 
 ## License

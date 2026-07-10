@@ -170,14 +170,26 @@ bool FLockstepCheckOutWorker::Execute(FLockstepSourceControlCommand& InCommand)
 		}
 		else
 		{
-			bAllSucceeded = false;
-			InCommand.ErrorMessages.Add(Err);
 			if (Existing.IsValid())
 			{
 				R.LockState = ELockstepLockState::LockedByOther;
 				R.LockId = Existing.Id;
 				R.LockOwner = Existing.OwnerName;
 				R.LockedAt = Existing.LockedAt;
+			}
+
+			if (Existing.IsValid() && InCommand.bSoftLockMode)
+			{
+				// Advisory locks: the collision is a warning, not a blocker, so
+				// auto-checkout-on-modify flows carry on without the lock.
+				InCommand.InfoMessages.Add(FString::Printf(
+					TEXT("%s is locked by %s — soft-lock mode: continuing without the lock (advisory only)."),
+					*Rel, *Existing.OwnerName));
+			}
+			else
+			{
+				bAllSucceeded = false;
+				InCommand.ErrorMessages.Add(Err);
 			}
 		}
 		States.Add(MoveTemp(R));
