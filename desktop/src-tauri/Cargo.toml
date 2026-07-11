@@ -1,6 +1,6 @@
 [package]
 name = "lockstep-desktop"
-version = "0.1.0"
+version = "0.1.1"
 description = "Lockstep desktop — git-based source control with Perforce-grade locking"
 authors = ["Lockstep"]
 edition = "2021"

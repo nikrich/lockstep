@@ -422,6 +422,11 @@ export const useStore = create<State>((set, get) => ({
         }
         try {
           const changed = await native.gitStatus(local);
+          // Staging is a UI selection (toggleStage) that git's index knows
+          // nothing about — carry the user's flags across the rebuild, or the
+          // 8s background poll wipes them. Git's index state only seeds rows
+          // we haven't seen before.
+          const prevStaged = new Map(get().files.map((f) => [f.path, f.staged]));
           files = changed.map((c) => {
             const lk = lockByPath.get(c.path);
             const state = lk
@@ -438,7 +443,7 @@ export const useStore = create<State>((set, get) => ({
               owner: lk ? lk.owner : null,
               age: lk?.age,
               stale: lk?.stale,
-              staged: c.staged,
+              staged: state === "modified" ? prevStaged.get(c.path) ?? c.staged : c.staged,
               store: storeFor(c.path),
               lockId: lk?.id,
             } as RepoFile;

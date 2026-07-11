@@ -26,7 +26,13 @@ fn git(repo: &str, args: &[&str]) -> Result<String, String> {
     }
     let out = cmd
         .output()
-        .map_err(|e| format!("could not run git (is it installed?): {e}"))?;
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                format!("could not run git — is it installed and on PATH? ({e})")
+            } else {
+                format!("could not run git: {e}")
+            }
+        })?;
     if !out.status.success() {
         return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
     }
@@ -188,11 +194,30 @@ pub fn git_submit(path: String, message: String, paths: Vec<String>) -> Result<S
     if paths.is_empty() {
         git(&path, &["add", "-A"])?;
     } else {
-        let mut args = vec!["add", "--"];
+        // Windows' CreateProcess command line caps at 32,767 chars; a big
+        // submit (World Partition maps stage hundreds of long external-actor
+        // paths) blows past it in one `git add`. Batch the adds, same 30k
+        // threshold as the UE plugin's LockstepGit::RunCommand.
+        const MAX_ARGS_LEN: usize = 30_000;
+        let flush = |batch: &[&str]| -> Result<(), String> {
+            let mut args = vec!["add", "--"];
+            args.extend_from_slice(batch);
+            git(&path, &args).map(|_| ())
+        };
+        let mut batch: Vec<&str> = Vec::new();
+        let mut len = 0usize;
         for p in &paths {
-            args.push(p.as_str());
+            if !batch.is_empty() && len + p.len() + 3 > MAX_ARGS_LEN {
+                flush(&batch)?;
+                batch.clear();
+                len = 0;
+            }
+            batch.push(p.as_str());
+            len += p.len() + 3; // space + quoting headroom per arg
         }
-        git(&path, &args)?;
+        if !batch.is_empty() {
+            flush(&batch)?;
+        }
     }
     git(&path, &["commit", "-m", &message])?;
     git(&path, &["push"])?;
@@ -247,7 +272,13 @@ fn git_diff_cmd(repo: &str, args: &[&str]) -> Result<(String, i32), String> {
     }
     let out = cmd
         .output()
-        .map_err(|e| format!("could not run git (is it installed?): {e}"))?;
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                format!("could not run git — is it installed and on PATH? ({e})")
+            } else {
+                format!("could not run git: {e}")
+            }
+        })?;
     Ok((
         String::from_utf8_lossy(&out.stdout).into_owned(),
         out.status.code().unwrap_or(-1),
