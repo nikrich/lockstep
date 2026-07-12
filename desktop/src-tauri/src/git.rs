@@ -202,7 +202,25 @@ pub fn git_submit(path: String, message: String, paths: Vec<String>) -> Result<S
         let flush = |batch: &[&str]| -> Result<(), String> {
             let mut args = vec!["add", "--"];
             args.extend_from_slice(batch);
-            git(&path, &args).map(|_| ())
+            match git(&path, &args) {
+                Ok(_) => Ok(()),
+                // A path that matches nothing (the editor deleted it since the
+                // last status, or its deletion is already staged) must not sink
+                // the other N-1 files — and worse, the chunks already added
+                // stay staged, poisoning every retry. Re-add per path and skip
+                // only the vanished ones; any other failure is real.
+                Err(e) if e.contains("did not match any files") => {
+                    for p in batch {
+                        if let Err(pe) = git(&path, &["add", "--", p]) {
+                            if !pe.contains("did not match any files") {
+                                return Err(pe);
+                            }
+                        }
+                    }
+                    Ok(())
+                }
+                Err(e) => Err(e),
+            }
         };
         let mut batch: Vec<&str> = Vec::new();
         let mut len = 0usize;
