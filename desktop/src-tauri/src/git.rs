@@ -192,27 +192,40 @@ pub fn git_submit(path: String, message: String, paths: Vec<String>) -> Result<S
         return Err("a commit message is required".into());
     }
     if paths.is_empty() {
-        git(&path, &["add", "-A"])?;
+        if let Err(e) = git(&path, &["add", "-A", "--ignore-errors"]) {
+            if !e.contains("unable to index file") {
+                return Err(e);
+            }
+        }
     } else {
         // Windows' CreateProcess command line caps at 32,767 chars; a big
         // submit (World Partition maps stage hundreds of long external-actor
         // paths) blows past it in one `git add`. Batch the adds, same 30k
         // threshold as the UE plugin's LockstepGit::RunCommand.
         const MAX_ARGS_LEN: usize = 30_000;
+        // The working copy is live while the editor runs: a path can vanish
+        // after the status snapshot ("did not match any files") or become
+        // unreadable/deleted mid-add ("unable to index file" — the editor
+        // holds a write lock or removed it while the LFS filter was reading).
+        // `git add` writes its index atomically per invocation, so without
+        // handling both, one bad file throws away the whole chunk and aborts
+        // the submit. --ignore-errors makes git stage what it can and report
+        // the rest on stderr with exit 1 — that's a partial success we accept;
+        // the skipped files just ride the next submit.
         let flush = |batch: &[&str]| -> Result<(), String> {
-            let mut args = vec!["add", "--"];
+            let mut args = vec!["add", "--ignore-errors", "--"];
             args.extend_from_slice(batch);
             match git(&path, &args) {
                 Ok(_) => Ok(()),
-                // A path that matches nothing (the editor deleted it since the
-                // last status, or its deletion is already staged) must not sink
-                // the other N-1 files — and worse, the chunks already added
-                // stay staged, poisoning every retry. Re-add per path and skip
-                // only the vanished ones; any other failure is real.
+                Err(e) if e.contains("unable to index file") => Ok(()),
+                // Unmatched pathspecs are fatal before anything is added, so
+                // retry per path and skip only the vanished ones.
                 Err(e) if e.contains("did not match any files") => {
                     for p in batch {
-                        if let Err(pe) = git(&path, &["add", "--", p]) {
-                            if !pe.contains("did not match any files") {
+                        if let Err(pe) = git(&path, &["add", "--ignore-errors", "--", p]) {
+                            if !pe.contains("did not match any files")
+                                && !pe.contains("unable to index file")
+                            {
                                 return Err(pe);
                             }
                         }

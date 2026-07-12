@@ -1,7 +1,7 @@
 {
   "name": "lockstep-desktop",
   "private": true,
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
   "description": "Lockstep — git-based source control for Unreal & Unity, with Perforce-grade locking. Desktop client.",
   "scripts": {
